@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "ifs24032-pabwe2026-sk-p5-vue",
+      "name": "11s24032-pabwe2026-sk-p5-vue",
       "dependencies": {
         "pinia": "^4.0.3",
         "sweetalert2": "^11.26.25",

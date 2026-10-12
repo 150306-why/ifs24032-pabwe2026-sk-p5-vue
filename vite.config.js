@@ -5,10 +5,7 @@ import process from "process";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const apiUrl = env.VITE_DELCOM_BASEURL || "https://open-api.delcom.org/api/v1";
-  // Di build produksi, request lewat rewrite Vercel (/api/v1 -> open-api.delcom.org)
-  // agar same-origin dan tidak memicu preflight CORS.
-  const baseUrl = mode === "production" && !env.VITE_DELCOM_BASEURL ? "/api/v1" : apiUrl;
+  const baseUrl = env.VITE_DELCOM_BASEURL || "https://open-api.delcom.org/api/v1";
   const port = Number(env.APP_PORT) || 3000;
 
   return {
@@ -24,7 +21,8 @@ export default defineConfig(({ mode }) => {
       setupFiles: "./src/setupTests.js",
       include: ["src/**/*.test.{js,jsx}"],
       exclude: ["**/node_modules/**", "**/.bun/**", "**/.node/**", "**/dist/**"],
-      reporters: ["default"],
+      reporters: ["default", "junit"],
+      outputFile: { junit: "./test-results/junit.xml" },
       coverage: {
         provider: "v8",
         reporter: ["text", "json", "html", "lcov"],

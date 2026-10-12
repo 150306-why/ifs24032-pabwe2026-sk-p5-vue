@@ -8,8 +8,8 @@ dist
 
 # code coverage and reports
 coverage
-
-
+test-results
+.scannerwork
 *.lcov
 
 # logs
