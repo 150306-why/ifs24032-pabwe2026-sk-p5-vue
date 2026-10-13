@@ -1,42 +1,42 @@
-import { defineStore } from "pinia";
-import { computed, ref } from "vue";
-import { postLogin, postRegister } from "../api/authApi";
-import { getAccessToken, putAccessToken, removeAccessToken } from "../../../helpers/apiHelper";
+import { defineStore } from 'pinia'
+import { ref } from 'vue'
+import { login, register, logout } from '../api/authApi.js'
+import { getAccessToken, putAccessToken, removeAccessToken } from '../../../helpers/apiHelper.js'
 
-export const useAuthStore = defineStore("auth", () => {
-  const token = ref(getAccessToken());
-  const isAuthLogin = ref(false);
-  const isAuthRegister = ref(false);
-  const isAuthLogout = ref(false);
-  const isAuthenticated = computed(() => Boolean(token.value));
+export const useAuthStore = defineStore('auth', () => {
+  const token = ref(getAccessToken())
+  const profile = ref(null)
+  const isAuthLogin = ref(false)
+  const isAuthRegister = ref(false)
+  const isAuthLogout = ref(false)
 
-  async function login(payload) {
-    isAuthLogin.value = true;
+  async function loginUser(payload) {
+    const res = await login(payload)
+    isAuthLogin.value = Boolean(res.success)
+    if (res.success) {
+      token.value = res.data.token
+      putAccessToken(res.data.token)
+    }
+    return res
+  }
+
+  async function registerUser(payload) {
+    const res = await register(payload)
+    isAuthRegister.value = Boolean(res.success)
+    return res
+  }
+
+  async function logoutUser() {
     try {
-      const json = await postLogin(payload);
-      token.value = json.data.token;
-      putAccessToken(token.value);
-      return json.message;
+      await logout()
     } finally {
-      isAuthLogin.value = false;
+      removeAccessToken()
+      token.value = null
+      profile.value = null
+      isAuthLogin.value = false
+      isAuthLogout.value = true
     }
   }
 
-  async function register(payload) {
-    isAuthRegister.value = true;
-    try {
-      return (await postRegister(payload)).message;
-    } finally {
-      isAuthRegister.value = false;
-    }
-  }
-
-  function logout() {
-    isAuthLogout.value = true;
-    removeAccessToken();
-    token.value = null;
-    isAuthLogout.value = false;
-  }
-
-  return { token, isAuthLogin, isAuthRegister, isAuthLogout, isAuthenticated, login, register, logout };
-});
+  return { token, profile, isAuthLogin, isAuthRegister, isAuthLogout, loginUser, registerUser, logoutUser }
+})

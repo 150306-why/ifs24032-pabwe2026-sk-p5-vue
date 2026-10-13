@@ -1,50 +1,33 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { flushPromises } from "@vue/test-utils";
+import { screen, fireEvent, waitFor } from '@testing-library/vue'
+import { renderWithProviders } from '../../../test-utils.js'
+import LoginPage from './LoginPage.vue'
+import * as api from '../api/authApi.js'
+import { showErrorDialog } from '../../../helpers/toolsHelper.js'
 
-const dialogs = vi.hoisted(() => ({ showErrorDialog: vi.fn() }));
-const api = vi.hoisted(() => ({ postLogin: vi.fn(), postRegister: vi.fn() }));
-vi.mock("../../../helpers/toolsHelper", () => dialogs);
-vi.mock("../api/authApi", () => api);
+vi.mock('../api/authApi.js')
+vi.mock('../../../helpers/toolsHelper.js', () => ({ showErrorDialog: vi.fn() }))
 
-import { renderWithProviders } from "../../../test-utils";
-import LoginPage from "./LoginPage.vue";
+async function fillAndSubmit() {
+  await fireEvent.update(document.querySelector('#login-email-input'), 'a@b.c')
+  await fireEvent.update(document.querySelector('#login-password-input'), 'secret')
+  await fireEvent.click(document.querySelector('#login-submit-button'))
+}
 
-describe("LoginPage", () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-    localStorage.clear();
-  });
+describe('LoginPage', () => {
+  it('redirects home on success', async () => {
+    api.login.mockResolvedValue({ success: true, data: { token: 't' } })
+    const { router } = renderWithProviders(LoginPage)
+    const push = vi.spyOn(router, 'push')
+    await fillAndSubmit()
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/'))
+    expect(api.login).toHaveBeenCalledWith({ email: 'a@b.c', password: 'secret' })
+  })
 
-  it("menampilkan formulir dengan label yang terhubung", async () => {
-    const { wrapper } = await renderWithProviders(LoginPage, { route: "/auth/login" });
-    expect(wrapper.find("h1").text()).toBe("Masuk Akun");
-    expect(wrapper.find('label[for="login-email-input"]').exists()).toBe(true);
-    expect(wrapper.find('a[href="/auth/register"]').exists()).toBe(true);
-    wrapper.unmount();
-  });
-
-  it("login berhasil lalu pindah ke beranda", async () => {
-    api.postLogin.mockResolvedValue({ message: "ok", data: { token: "t" } });
-    const { wrapper, router } = await renderWithProviders(LoginPage, { route: "/auth/login" });
-
-    await wrapper.find("#login-email-input").setValue("a@b.c");
-    await wrapper.find("#login-password-input").setValue("rahasia");
-    await wrapper.find("form").trigger("submit");
-    await flushPromises();
-
-    expect(api.postLogin).toHaveBeenCalledWith({ email: "a@b.c", password: "rahasia" });
-    expect(router.currentRoute.value.path).toBe("/");
-    wrapper.unmount();
-  });
-
-  it("menampilkan dialog error saat login gagal", async () => {
-    api.postLogin.mockRejectedValue(new Error("Email salah"));
-    const { wrapper } = await renderWithProviders(LoginPage, { route: "/auth/login" });
-
-    await wrapper.find("form").trigger("submit");
-    await flushPromises();
-
-    expect(dialogs.showErrorDialog).toHaveBeenCalledWith("Email salah");
-    wrapper.unmount();
-  });
-});
+  it('shows error dialog on failure', async () => {
+    api.login.mockResolvedValue({ success: false, message: 'Salah' })
+    renderWithProviders(LoginPage)
+    await fillAndSubmit()
+    await waitFor(() => expect(showErrorDialog).toHaveBeenCalledWith('Salah'))
+    expect(screen.getByRole('link', { name: 'Daftar' })).toBeInTheDocument()
+  })
+})

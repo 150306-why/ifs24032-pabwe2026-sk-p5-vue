@@ -1,9 +1,10 @@
-import { createApp } from "vue";
-import { createPinia } from "pinia";
-import App from "./App.vue";
-import router from "./router";
-import "./index.css";
+import { createApp } from 'vue'
+import { createPinia } from 'pinia'
+import '@fontsource/plus-jakarta-sans/400.css'
+import '@fontsource/plus-jakarta-sans/600.css'
+import '@fontsource/plus-jakarta-sans/800.css'
+import './index.css'
+import App from './App.vue'
+import { createAppRouter } from './router.js'
 
-const app = createApp(App).use(createPinia()).use(router);
-
-router.isReady().then(() => app.mount("#app")); 
+createApp(App).use(createPinia()).use(createAppRouter()).mount('#app')

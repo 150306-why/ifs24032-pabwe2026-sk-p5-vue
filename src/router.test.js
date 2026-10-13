@@ -1,30 +1,26 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import router, { authGuard } from "./router";
-import { putAccessToken } from "./helpers/apiHelper";
+import { createMemoryHistory } from 'vue-router'
+import { createAppRouter } from './router.js'
 
-describe("router", () => {
-  beforeEach(() => localStorage.clear());
+async function go(path) {
+  const router = createAppRouter(createMemoryHistory())
+  await router.push(path)
+  return router.currentRoute.value.fullPath
+}
 
-  it("mengarahkan rute terproteksi ke login saat belum masuk", () => {
-    expect(authGuard({ path: "/", meta: { requiresAuth: true } })).toBe("/auth/login");
-  });
-
-  it("mengarahkan halaman auth ke beranda saat sudah masuk", () => {
-    putAccessToken("t");
-    expect(authGuard({ path: "/auth/login", meta: {} })).toBe("/");
-  });
-
-  it("mengizinkan navigasi lain", () => {
-    expect(authGuard({ path: "/auth/login", meta: {} })).toBe(true);
-    putAccessToken("t");
-    expect(authGuard({ path: "/users", meta: { requiresAuth: true } })).toBe(true);
-  });
-
-  it("mendaftarkan seluruh rute dan memuat komponen secara lazy", async () => {
-    const records = router.getRoutes();
-    const loaders = records.flatMap((record) => Object.values(record.components ?? {}));
-    const loaded = await Promise.all(loaders.map((load) => (typeof load === "function" ? load() : load)));
-    expect(loaded.length).toBeGreaterThanOrEqual(8);
-    expect(router.resolve("/aucations/5").matched.length).toBe(2);
-  });
-});
+describe('route guard', () => {
+  it('redirects guests away from protected routes', async () => {
+    expect(await go('/users')).toBe('/auth/login')
+  })
+  it('redirects logged-in users away from auth pages', async () => {
+    localStorage.setItem('accessToken', 't')
+    expect(await go('/auth/login')).toBe('/')
+  })
+  it('allows logged-in users on protected routes and 404', async () => {
+    localStorage.setItem('accessToken', 't')
+    expect(await go('/profile')).toBe('/profile')
+    expect(await go('/nope')).toBe('/nope')
+  })
+  it('allows guests on auth pages', async () => {
+    expect(await go('/auth/register')).toBe('/auth/register')
+  })
+})

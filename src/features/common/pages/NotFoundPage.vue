@@ -1,9 +1,9 @@
 <template>
-  <main class="flex min-h-screen flex-col items-center justify-center gap-4 p-4 text-center">
-    <h1 class="text-4xl font-extrabold">404 - Halaman tidak ditemukan</h1>
-    <p class="text-slate-700">Halaman yang Anda cari tidak tersedia.</p>
-    <RouterLink to="/" class="rounded-lg bg-indigo-700 px-4 py-2 font-semibold text-white">
-      Kembali ke beranda
-    </RouterLink>
+  <main class="min-h-screen grid place-items-center p-4 text-center">
+    <section aria-label="Halaman tidak ditemukan">
+      <h1 class="text-5xl font-extrabold text-brand">404</h1>
+      <p class="mt-2">Halaman yang Anda cari tidak ada.</p>
+      <RouterLink to="/" class="mt-4 inline-block font-semibold text-brand underline">Kembali ke beranda</RouterLink>
+    </section>
   </main>
 </template>

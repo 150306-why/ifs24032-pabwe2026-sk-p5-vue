@@ -1,104 +1,60 @@
 <script setup>
-import { computed, onMounted, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
-import { useAucationsStore } from "../states/aucationsStore";
-import AddModal from "../modals/AddModal.vue";
-import {
-  formatDate,
-  formatRupiah,
-  getHighestBid,
-  isAucationClosed,
-  showErrorDialog,
-} from "../../../helpers/toolsHelper";
+import { ref, computed, onMounted } from 'vue'
+import { useAucationsStore } from '../states/aucationsStore.js'
+import UserAvatar from '../../users/components/UserAvatar.vue'
+import AddModal from '../modals/AddModal.vue'
+import { formatRupiah, formatDate, isClosedAt } from '../../../helpers/toolsHelper.js'
 
-const TABS = [
-  { key: "all", label: "Semua Lelang", filter: {} },
-  { key: "me", label: "Lelang Saya", filter: { is_me: 1 } },
-  { key: "open", label: "Lelang Berlangsung", filter: { is_closed: 0 } },
-  { key: "closed", label: "Lelang Ditutup", filter: { is_closed: 1 } },
-];
+const store = useAucationsStore()
+const tabs = [
+  { id: 'all', label: 'Semua', filters: {} },
+  { id: 'mine', label: 'Lelang saya', filters: { is_me: true } },
+  { id: 'open', label: 'Berlangsung', filters: { is_closed: false } },
+  { id: 'closed', label: 'Selesai', filters: { is_closed: true } },
+]
+const tab = ref('all')
+const search = ref('')
+const showAdd = ref(false)
 
-const store = useAucationsStore();
-const route = useRoute();
-const router = useRouter();
-const keyword = ref("");
-const modal = ref(null);
-
-const tab = computed(() => TABS.find((item) => item.key === route.query.tab) ?? TABS[0]);
-const shown = computed(() => {
-  const needle = keyword.value.toLowerCase();
-  return store.aucations.filter((item) => `${item.title} ${item.description}`.toLowerCase().includes(needle));
-});
-
-const load = () => store.fetchAucations(tab.value.filter).catch((error) => showErrorDialog(error.message));
-const selectTab = (key) => router.replace({ query: { tab: key } });
-
-watch(tab, load);
-onMounted(load);
+const shown = computed(() => store.aucations.filter((a) => a.title.toLowerCase().includes(search.value.toLowerCase())))
+function load(t) {
+  tab.value = t.id
+  return store.loadAucations(t.filters)
+}
+onMounted(() => load(tabs[0]))
 </script>
 
 <template>
-  <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
-    <h1 class="text-2xl font-extrabold">Daftar Lelang</h1>
-    <button
-      type="button"
-      class="rounded-lg bg-indigo-700 px-4 py-2 font-semibold text-white"
-      @click="modal.open()"
-    >
-      Tambah lelang
-    </button>
-  </div>
-
-  <div role="group" aria-label="Filter lelang" class="mb-3 flex flex-wrap gap-2">
-    <button
-      v-for="item in TABS"
-      :key="item.key"
-      type="button"
-      :aria-pressed="tab.key === item.key"
-      :class="tab.key === item.key ? 'bg-indigo-700 text-white' : 'bg-white text-slate-900'"
-      class="rounded-lg px-3 py-1 text-sm font-semibold shadow"
-      @click="selectTab(item.key)"
-    >
-      {{ item.label }}
-    </button>
-  </div>
-
-  <label for="aucation-search" class="mb-1 block text-sm font-semibold text-slate-700">Cari judul atau deskripsi</label>
-  <input
-    id="aucation-search"
-    v-model="keyword"
-    type="search"
-    class="mb-4 w-full rounded-lg border border-slate-400 px-3 py-2"
-  />
-
-  <p v-if="store.isAucation" role="status" class="text-slate-700">Memuat data...</p>
-  <p v-else-if="!shown.length" class="text-slate-700">Belum ada lelang.</p>
-  <ul class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-    <li v-for="item in shown" :key="item.id" class="overflow-hidden rounded-xl bg-white shadow">
-      <img
-        v-if="item.cover"
-        :src="item.cover"
-        :alt="`Cover ${item.title}`"
-        width="400"
-        height="200"
-        loading="lazy"
-        class="h-40 w-full object-cover"
-      />
-      <div v-else class="flex h-40 items-center justify-center bg-slate-200 text-sm text-slate-700">Tanpa cover</div>
-      <div class="p-4">
-        <h2 class="font-bold">
-          <RouterLink :to="`/aucations/${item.id}`" class="text-indigo-700 underline">{{ item.title }}</RouterLink>
-        </h2>
-        <p class="mt-1 inline-block rounded px-2 py-0.5 text-xs font-bold"
-          :class="isAucationClosed(item) ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-900'">
-          {{ isAucationClosed(item) ? "Ditutup" : "Berlangsung" }}
-        </p>
-        <p class="mt-1 text-sm text-slate-700">Harga awal: {{ formatRupiah(item.start_bid) }}</p>
-        <p class="text-sm text-slate-700">Tawaran tertinggi: {{ formatRupiah(getHighestBid(item)) }}</p>
-        <p class="text-sm text-slate-700">Ditutup: {{ formatDate(item.closed_at) }}</p>
-      </div>
-    </li>
-  </ul>
-
-  <AddModal ref="modal" @added="load" />
+  <section aria-label="Daftar lelang" class="space-y-6">
+    <div class="flex items-center">
+      <h1 class="mr-auto text-2xl font-extrabold text-brand">Lelang</h1>
+      <button type="button" aria-label="Tambah lelang" class="rounded-lg bg-brand px-4 py-2 font-semibold text-white" @click="showAdd = true">Tambah lelang</button>
+    </div>
+    <div role="tablist" class="flex flex-wrap gap-2">
+      <button v-for="t in tabs" :key="t.id" role="tab" type="button" :aria-selected="tab === t.id" :aria-label="t.label"
+        class="rounded-full border border-brand px-4 py-1 font-semibold aria-selected:bg-brand aria-selected:text-white" @click="load(t)">{{ t.label }}</button>
+    </div>
+    <input v-model="search" type="search" aria-label="Cari lelang" placeholder="Cari judul lelang" class="w-full rounded-lg border border-stone-500 px-3 py-2" />
+    <ul class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <li v-for="a in shown" :key="a.id">
+        <article class="relative h-full overflow-hidden rounded-2xl bg-white shadow transition hover:-translate-y-0.5 hover:shadow-lg focus-within:ring-2 focus-within:ring-brand">
+          <img v-if="a.cover" loading="lazy" decoding="async" :src="a.cover" :alt="`Sampul ${a.title}`" class="h-40 w-full object-cover" />
+          <div class="space-y-2 p-4">
+            <h2 class="font-bold"><RouterLink :to="`/aucations/${a.id}`" class="text-brand after:absolute after:inset-0 hover:underline">{{ a.title }}</RouterLink></h2>
+            <p class="font-semibold text-accent">{{ formatRupiah(a.start_bid) }}</p>
+            <p class="text-xs">
+              <span v-if="isClosedAt(a.closed_at)" class="rounded-full bg-red-100 px-2 py-0.5 font-semibold text-red-800">Lelang selesai</span>
+              <span v-else class="rounded-full bg-emerald-100 px-2 py-0.5 font-semibold text-emerald-900">Sedang berlangsung</span>
+            </p>
+            <p class="text-sm text-stone-700">Ditutup {{ formatDate(a.closed_at) }}</p>
+            <div class="flex items-center gap-2 text-sm text-stone-700">
+              <UserAvatar :name="a.author.name" :photo="a.author.photo" size="sm" />
+              <span>{{ a.author.name }}</span>
+            </div>
+          </div>
+        </article>
+      </li>
+    </ul>
+    <AddModal v-if="showAdd" @close="showAdd = false" @saved="load(tabs[0])" />
+  </section>
 </template>

@@ -1,99 +1,67 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { flushPromises } from "@vue/test-utils";
+import { screen, fireEvent, waitFor } from '@testing-library/vue'
+import { renderWithProviders } from '../../../test-utils.js'
+import HomePage from './HomePage.vue'
+import * as api from '../api/aucationApi.js'
+import { showSuccessDialog, showErrorDialog } from '../../../helpers/toolsHelper.js'
 
-const dialogs = vi.hoisted(() => ({ showErrorDialog: vi.fn(), showSuccessDialog: vi.fn() }));
-const api = vi.hoisted(() => ({ getAucations: vi.fn(), postAucation: vi.fn() }));
-vi.mock("../../../helpers/toolsHelper", async (original) => ({ ...(await original()), ...dialogs }));
-vi.mock("../api/aucationApi", () => api);
+vi.mock('../api/aucationApi.js')
+vi.mock('../../../helpers/toolsHelper.js', async (orig) => ({
+  ...(await orig()), showSuccessDialog: vi.fn(), showErrorDialog: vi.fn(),
+}))
 
-import { renderWithProviders } from "../../../test-utils";
-import HomePage from "./HomePage.vue";
+const list = { success: true, data: { aucations: [{ id: 1, title: 'Lukisan', start_bid: 150000, closed_at: '2099-12-01 00:00:00', cover: 'http://x/c.png', author: { name: 'Sari', photo: 'http://x/p.png' } }, { id: 2, title: 'Jam', start_bid: 5000, closed_at: '2000-01-01 00:00:00', author: { name: 'Budi', photo: '' } }] } }
 
-const future = new Date(Date.now() + 86_400_000).toISOString();
-const past = new Date(Date.now() - 86_400_000).toISOString();
-const items = [
-  { id: 1, title: "Jam Antik", description: "Jam saku", start_bid: 1000, closed_at: future, cover: "/c.png" },
-  { id: 2, title: "Sepeda", description: "Sepeda gunung", start_bid: 5000, highest_bid: 7000, closed_at: past },
-];
+async function openAndFill() {
+  await fireEvent.click(screen.getByRole('button', { name: 'Tambah lelang' }))
+  await fireEvent.update(screen.getByLabelText('Judul'), 'Baru')
+  await fireEvent.update(screen.getByLabelText('Deskripsi'), 'Desc')
+  await fireEvent.update(screen.getByLabelText('Harga awal'), '1000')
+  await fireEvent.update(screen.getByLabelText('Ditutup pada'), '2026-12-01T10:00')
+  await fireEvent.click(screen.getByRole('button', { name: 'Simpan lelang' }))
+}
 
-describe("HomePage", () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-    api.getAucations.mockResolvedValue({ data: { aucations: items } });
-  });
+describe('HomePage', () => {
+  beforeEach(() => { vi.clearAllMocks(); api.getAucations.mockResolvedValue(list) })
 
-  it("menampilkan kartu lelang beserta status dan cover", async () => {
-    const { wrapper } = await renderWithProviders(HomePage);
-    expect(api.getAucations).toHaveBeenCalledWith({});
-    expect(wrapper.find("h1").text()).toBe("Daftar Lelang");
+  it('shows cards, searches and switches tabs', async () => {
+    renderWithProviders(HomePage)
+    expect(await screen.findByText('Rp 150.000')).toBeInTheDocument()
+    expect(screen.getByText('Budi')).toBeInTheDocument()
+    expect(screen.getByText('Lelang selesai')).toBeInTheDocument()
+    expect(screen.getByText('Sedang berlangsung')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Sampul Lukisan' })).toBeInTheDocument()
+    await fireEvent.update(screen.getByLabelText('Cari lelang'), 'jam')
+    expect(screen.queryByText('Lukisan')).not.toBeInTheDocument()
+    await fireEvent.click(screen.getByRole('tab', { name: 'Lelang saya' }))
+    expect(api.getAucations).toHaveBeenLastCalledWith({ is_me: true })
+    await fireEvent.click(screen.getByRole('tab', { name: 'Berlangsung' }))
+    expect(api.getAucations).toHaveBeenLastCalledWith({ is_closed: false })
+    await fireEvent.click(screen.getByRole('tab', { name: 'Selesai' }))
+    expect(api.getAucations).toHaveBeenLastCalledWith({ is_closed: true })
+  })
 
-    const cards = wrapper.findAll("ul > li");
-    expect(cards).toHaveLength(2);
-    expect(cards[0].find("img").attributes("alt")).toBe("Cover Jam Antik");
-    expect(cards[0].text()).toContain("Berlangsung");
-    expect(cards[1].text()).toContain("Tanpa cover");
-    expect(cards[1].text()).toContain("Ditutup");
-    wrapper.unmount();
-  });
+  it('creates an aucation, closes the modal and reloads', async () => {
+    api.addAucation.mockResolvedValue({ success: true, message: 'Dibuat' })
+    renderWithProviders(HomePage)
+    await openAndFill()
+    await waitFor(() => expect(showSuccessDialog).toHaveBeenCalledWith('Dibuat'))
+    expect(api.addAucation).toHaveBeenCalledWith({ title: 'Baru', description: 'Desc', start_bid: 1000, closed_at: '2026-12-01 10:00:00' })
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(api.getAucations).toHaveBeenCalledTimes(2)
+  })
 
-  it("menyaring lelang lewat pencarian langsung", async () => {
-    const { wrapper } = await renderWithProviders(HomePage);
-    await wrapper.find("#aucation-search").setValue("sepeda");
-    expect(wrapper.findAll("ul > li")).toHaveLength(1);
+  it('keeps the modal open and shows an error when creation fails', async () => {
+    api.addAucation.mockResolvedValue({ success: false, message: 'Gagal' })
+    renderWithProviders(HomePage)
+    await openAndFill()
+    await waitFor(() => expect(showErrorDialog).toHaveBeenCalledWith('Gagal'))
+    expect(screen.getByRole('dialog', { name: 'Tambah lelang' })).toBeInTheDocument()
+  })
 
-    await wrapper.find("#aucation-search").setValue("tidak ada");
-    expect(wrapper.text()).toContain("Belum ada lelang");
-    wrapper.unmount();
-  });
-
-  it("memakai tab dari query dan mengganti tab", async () => {
-    const { wrapper, router } = await renderWithProviders(HomePage, { route: "/?tab=me" });
-    expect(api.getAucations).toHaveBeenLastCalledWith({ is_me: 1 });
-
-    const buttons = wrapper.findAll('[role="group"] button');
-    expect(buttons[1].attributes("aria-pressed")).toBe("true");
-
-    await buttons[3].trigger("click");
-    await flushPromises();
-    expect(router.currentRoute.value.query.tab).toBe("closed");
-    expect(api.getAucations).toHaveBeenLastCalledWith({ is_closed: 1 });
-    wrapper.unmount();
-  });
-
-  it("mengabaikan tab yang tidak dikenal", async () => {
-    const { wrapper } = await renderWithProviders(HomePage, { route: "/?tab=aneh" });
-    expect(api.getAucations).toHaveBeenLastCalledWith({});
-    wrapper.unmount();
-  });
-
-  it("menampilkan status memuat", async () => {
-    api.getAucations.mockReturnValue(new Promise(() => {}));
-    const { wrapper } = await renderWithProviders(HomePage);
-    expect(wrapper.find('[role="status"]').text()).toContain("Memuat");
-    wrapper.unmount();
-  });
-
-  it("menampilkan dialog error saat gagal memuat", async () => {
-    api.getAucations.mockRejectedValue(new Error("Server mati"));
-    const { wrapper } = await renderWithProviders(HomePage);
-    expect(dialogs.showErrorDialog).toHaveBeenCalledWith("Server mati");
-    wrapper.unmount();
-  });
-
-  it("membuka modal tambah dan memuat ulang setelah lelang ditambahkan", async () => {
-    api.postAucation.mockResolvedValue({ message: "Dibuat" });
-    const { wrapper } = await renderWithProviders(HomePage);
-    await wrapper.find("div > button").trigger("click");
-    expect(wrapper.find("dialog").element.hasAttribute("open")).toBe(true);
-
-    await wrapper.find("#add-title").setValue("Baru");
-    await wrapper.find("#add-desc").setValue("Desk");
-    await wrapper.find("#add-bid").setValue("100");
-    await wrapper.find("#add-closed").setValue("2030-01-01T10:00");
-    await wrapper.find("dialog form").trigger("submit");
-    await flushPromises();
-
-    expect(api.getAucations).toHaveBeenCalledTimes(2);
-    wrapper.unmount();
-  });
-});
+  it('closes the add modal with Escape', async () => {
+    renderWithProviders(HomePage)
+    await fireEvent.click(screen.getByRole('button', { name: 'Tambah lelang' }))
+    await fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+})

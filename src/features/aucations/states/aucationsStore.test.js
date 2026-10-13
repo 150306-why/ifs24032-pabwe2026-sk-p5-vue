@@ -1,85 +1,33 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { setActivePinia, createPinia } from 'pinia'
+import { useAucationsStore } from './aucationsStore.js'
+import * as api from '../api/aucationApi.js'
 
-const api = vi.hoisted(() => ({
-  getAucations: vi.fn(),
-  getAucation: vi.fn(),
-  postAucation: vi.fn(),
-  putAucation: vi.fn(),
-  postCover: vi.fn(),
-  deleteAucation: vi.fn(),
-  postBid: vi.fn(),
-  deleteBid: vi.fn(),
-  deleteAllAucations: vi.fn(),
-}));
-vi.mock("../api/aucationApi", () => api);
+vi.mock('../api/aucationApi.js')
 
-import { createMockPinia } from "../../../test-utils";
-import { useAucationsStore } from "./aucationsStore";
+describe('aucationsStore', () => {
+  beforeEach(() => { setActivePinia(createPinia()); vi.resetAllMocks() })
 
-describe("aucationsStore", () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-    createMockPinia();
-  });
+  it('loads list and detail, ignoring failures', async () => {
+    const s = useAucationsStore()
+    api.getAucations.mockResolvedValueOnce({ success: true, data: { aucations: [1] } }).mockResolvedValueOnce({ success: false })
+    await s.loadAucations({}); await s.loadAucations({})
+    expect(s.aucations).toEqual([1])
+    api.getAucation.mockResolvedValueOnce({ success: false }).mockResolvedValueOnce({ success: true, data: { aucation: { id: 2 } } })
+    await s.loadAucation(2)
+    expect(s.aucation).toBeNull()
+    await s.loadAucation(2)
+    expect(s.aucation).toEqual({ id: 2 })
+  })
 
-  it("mengambil daftar lelang", async () => {
-    api.getAucations.mockResolvedValue({ data: { aucations: [{ id: 1 }] } });
-    const store = useAucationsStore();
-    await store.fetchAucations({ is_me: 1 });
-    expect(api.getAucations).toHaveBeenCalledWith({ is_me: 1 });
-    expect(store.aucations).toEqual([{ id: 1 }]);
-    expect(store.isAucation).toBe(false);
-  });
-
-  it("memakai parameter dan hasil bawaan", async () => {
-    api.getAucations.mockResolvedValue({});
-    const store = useAucationsStore();
-    await store.fetchAucations();
-    expect(api.getAucations).toHaveBeenCalledWith({});
-    expect(store.aucations).toEqual([]);
-  });
-
-  it("mengambil detail lelang dan mengosongkan data lama", async () => {
-    api.getAucation.mockResolvedValue({ data: { aucation: { id: 9 } } });
-    const store = useAucationsStore();
-    store.aucation = { id: 1 };
-    const pending = store.fetchAucation(9);
-    expect(store.aucation).toBeNull();
-    await pending;
-    expect(store.aucation).toEqual({ id: 9 });
-  });
-
-  it("mematikan status loading saat pengambilan gagal", async () => {
-    api.getAucation.mockRejectedValue(new Error("tidak ada"));
-    const store = useAucationsStore();
-    await expect(store.fetchAucation(1)).rejects.toThrow("tidak ada");
-    expect(store.isAucation).toBe(false);
-  });
-
-  it.each([
-    ["addAucation", "postAucation", ["isAucationAdd", "isAucationAdded"], [{ t: 1 }]],
-    ["changeAucation", "putAucation", ["isAucationChange", "isAucationChanged"], [3, { t: 1 }]],
-    ["changeCover", "postCover", ["isAucationChangeCover", "isAucationChangedCover"], [3, new FormData()]],
-    ["removeAucation", "deleteAucation", ["isAucationDelete", "isAucationDeleted"], [3]],
-    ["addBid", "postBid", ["isBidAdd", "isBidAdded"], [3, { bid: 1 }]],
-    ["removeBid", "deleteBid", ["isBidDelete", "isBidDeleted"], [3]],
-    ["removeAllAucations", "deleteAllAucations", ["isAucationDeleteAll", "isAucationDeletedAll"], []],
-  ])("%s memanggil API dan mengatur flag", async (action, apiName, [busy, done], args) => {
-    api[apiName].mockResolvedValue({ message: "Selesai" });
-    const store = useAucationsStore();
-
-    expect(await store[action](...args)).toBe("Selesai");
-
-    expect(api[apiName]).toHaveBeenCalledWith(...args);
-    expect(store[busy]).toBe(false);
-    expect(store[done]).toBe(true);
-  });
-
-  it("mutasi gagal tidak menandai selesai", async () => {
-    api.postAucation.mockRejectedValue(new Error("gagal"));
-    const store = useAucationsStore();
-    await expect(store.addAucation({})).rejects.toThrow("gagal");
-    expect(store.isAucationAdd).toBe(false);
-    expect(store.isAucationAdded).toBe(false);
-  });
-});
+  it('tracks mutation flags', async () => {
+    const s = useAucationsStore()
+    api.addAucation.mockResolvedValue({ success: true })
+    api.changeAucation.mockResolvedValue({ success: true })
+    api.changeCover.mockResolvedValue({ success: true })
+    api.deleteAucation.mockResolvedValue({ success: false })
+    api.addBid.mockResolvedValue({ success: true })
+    api.deleteBid.mockResolvedValue({ success: true })
+    await s.addAucation({}); await s.changeAucation(1, {}); await s.changeCover(1, {}); await s.removeAucation(1); await s.placeBid(1, {}); await s.removeBid(1)
+    expect([s.isAucationAdd, s.isAucationChange, s.isAucationDelete, s.isBidAdd, s.isBidDelete]).toEqual([true, true, false, true, true])
+  })
+})

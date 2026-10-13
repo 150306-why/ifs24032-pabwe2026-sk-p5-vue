@@ -1,84 +1,54 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { flushPromises } from "@vue/test-utils";
+import { screen, fireEvent, waitFor } from '@testing-library/vue'
+import { renderWithProviders } from '../../../test-utils.js'
+import ProfilePage from './ProfilePage.vue'
+import * as api from '../api/userApi.js'
+import { showSuccessDialog, showErrorDialog } from '../../../helpers/toolsHelper.js'
 
-const dialogs = vi.hoisted(() => ({ showErrorDialog: vi.fn(), showSuccessDialog: vi.fn() }));
-const api = vi.hoisted(() => ({
-  getUsers: vi.fn(),
-  getMe: vi.fn(),
-  putMe: vi.fn(),
-  postPhoto: vi.fn(),
-  putPassword: vi.fn(),
-}));
-vi.mock("../../../helpers/toolsHelper", () => dialogs);
-vi.mock("../api/userApi", () => api);
+vi.mock('../api/userApi.js')
+vi.mock('../../../helpers/toolsHelper.js', async (orig) => ({
+  ...(await orig()), showSuccessDialog: vi.fn(), showErrorDialog: vi.fn(),
+}))
 
-import { renderWithProviders } from "../../../test-utils";
-import ProfilePage from "./ProfilePage.vue";
+const me = { success: true, data: { user: { name: 'Sari', email: 's@x.id' } } }
 
-describe("ProfilePage", () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-    api.getMe.mockResolvedValue({ data: { user: { id: 1, name: "Ifs", email: "i@d.id" } } });
-  });
+describe('ProfilePage', () => {
+  beforeEach(() => { vi.clearAllMocks(); api.getMe.mockResolvedValue(me) })
 
-  it("menampilkan profil dan mengubah nama", async () => {
-    api.putMe.mockResolvedValue({ message: "Profil diubah" });
-    const { wrapper } = await renderWithProviders(ProfilePage);
+  it('fills the form and saves profile', async () => {
+    api.updateMe.mockResolvedValue({ success: true, message: 'Tersimpan' })
+    renderWithProviders(ProfilePage)
+    await waitFor(() => expect(screen.getByLabelText('Nama')).toHaveValue('Sari'))
+    expect(screen.getByRole('heading', { name: 'Sari' })).toBeInTheDocument()
+    await fireEvent.update(screen.getByLabelText('Nama'), 'Sari B')
+    await fireEvent.update(screen.getByLabelText('Email'), 'b@x.id')
+    await fireEvent.click(screen.getByRole('button', { name: 'Simpan profil' }))
+    await waitFor(() => expect(showSuccessDialog).toHaveBeenCalledWith('Tersimpan'))
+    expect(api.updateMe).toHaveBeenCalledWith({ name: 'Sari B', email: 'b@x.id' })
+  })
 
-    expect(wrapper.text()).toContain("i@d.id");
-    expect(wrapper.find("#profile-name-input").element.value).toBe("Ifs");
+  it('keeps empty form when profile fails to load', async () => {
+    api.getMe.mockResolvedValue({ success: false })
+    renderWithProviders(ProfilePage)
+    await waitFor(() => expect(api.getMe).toHaveBeenCalled())
+    expect(screen.getByLabelText('Nama')).toHaveValue('')
+  })
 
-    await wrapper.find("#profile-name-input").setValue("Baru");
-    await wrapper.findAll("form")[0].trigger("submit");
-    await flushPromises();
+  it('changes password and reports errors', async () => {
+    api.changePassword.mockResolvedValue({ success: false, message: 'Salah' })
+    renderWithProviders(ProfilePage)
+    await fireEvent.update(screen.getByLabelText('Kata sandi saat ini'), 'old')
+    await fireEvent.update(screen.getByLabelText('Kata sandi baru'), 'new')
+    await fireEvent.update(screen.getByLabelText('Konfirmasi kata sandi baru'), 'new')
+    await fireEvent.click(screen.getByRole('button', { name: 'Ubah kata sandi' }))
+    await waitFor(() => expect(showErrorDialog).toHaveBeenCalledWith('Salah'))
+    expect(api.changePassword).toHaveBeenCalledWith({ password: 'old', new_password: 'new', new_password_confirmation: 'new' })
+  })
 
-    expect(api.putMe).toHaveBeenCalledWith({ name: "Baru" });
-    expect(dialogs.showSuccessDialog).toHaveBeenCalledWith("Profil diubah");
-    wrapper.unmount();
-  });
-
-  it("mengunggah foto profil", async () => {
-    api.postPhoto.mockResolvedValue({ message: "Foto diubah" });
-    const { wrapper } = await renderWithProviders(ProfilePage);
-    const file = new File(["x"], "foto.png", { type: "image/png" });
-    Object.defineProperty(wrapper.find("#profile-photo-input").element, "files", { value: [file] });
-
-    await wrapper.findAll("form")[1].trigger("submit");
-    await flushPromises();
-
-    expect(api.postPhoto.mock.calls[0][0].get("photo")).toBe(file);
-    expect(dialogs.showSuccessDialog).toHaveBeenCalledWith("Foto diubah");
-    wrapper.unmount();
-  });
-
-  it("mengubah kata sandi", async () => {
-    api.putPassword.mockResolvedValue({ message: "Sandi diubah" });
-    const { wrapper } = await renderWithProviders(ProfilePage);
-
-    await wrapper.find("#profile-old-password").setValue("lama123");
-    await wrapper.find("#profile-new-password").setValue("baru123");
-    await wrapper.findAll("form")[2].trigger("submit");
-    await flushPromises();
-
-    expect(api.putPassword).toHaveBeenCalledWith({ password: "lama123", new_password: "baru123" });
-    expect(dialogs.showSuccessDialog).toHaveBeenCalledWith("Sandi diubah");
-    wrapper.unmount();
-  });
-
-  it("menampilkan dialog error saat aksi gagal", async () => {
-    api.putMe.mockRejectedValue(new Error("Ditolak"));
-    const { wrapper } = await renderWithProviders(ProfilePage);
-    await wrapper.findAll("form")[0].trigger("submit");
-    await flushPromises();
-    expect(dialogs.showErrorDialog).toHaveBeenCalledWith("Ditolak");
-    wrapper.unmount();
-  });
-
-  it("menampilkan status memuat dan error saat profil gagal dimuat", async () => {
-    api.getMe.mockRejectedValue(new Error("Tidak masuk"));
-    const { wrapper } = await renderWithProviders(ProfilePage);
-    expect(wrapper.text()).toContain("Memuat profil");
-    expect(dialogs.showErrorDialog).toHaveBeenCalledWith("Tidak masuk");
-    wrapper.unmount();
-  });
-});
+  it('uploads a photo', async () => {
+    api.uploadPhoto.mockResolvedValue({ success: true, message: 'Foto' })
+    renderWithProviders(ProfilePage)
+    const file = new File(['x'], 'p.png', { type: 'image/png' })
+    await fireEvent.change(screen.getByLabelText('Foto profil'), { target: { files: [file] } })
+    await waitFor(() => expect(api.uploadPhoto).toHaveBeenCalledWith(file))
+  })
+})

@@ -1,10 +1,8 @@
-import { ref } from "vue";
+import { ref } from 'vue'
 
-/** Composable untuk state input form beserta handler perubahannya. */
-export function useInput(initialValue = "") {
-  const value = ref(initialValue);
-  const onChange = (event) => {
-    value.value = event.target.value;
-  };
-  return [value, onChange];
+export function useInput(initial = '') {
+  const value = ref(initial)
+  const onInput = (event) => { value.value = event.target.value }
+  const reset = () => { value.value = initial }
+  return { value, onInput, reset }
 }

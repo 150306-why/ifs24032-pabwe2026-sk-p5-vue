@@ -1,30 +1,19 @@
 <script setup>
-import { computed } from "vue";
+import { computed } from 'vue'
+import InlineText from './InlineText.vue'
+import { parseMarkdown } from '../../../helpers/markdownHelper.js'
 
-const props = defineProps({ content: { type: String, default: "" } });
-
-// Renderer markdown ringan dan aman: hanya heading, daftar, dan paragraf.
-// Teks dirender lewat interpolasi Vue sehingga tidak ada HTML mentah.
-const blocks = computed(() =>
-  props.content
-    .split("\n")
-    .filter((line) => line.trim())
-    .map((line) => {
-      if (line.startsWith("# ")) return { type: "h2", text: line.slice(2) };
-      if (line.startsWith("- ")) return { type: "li", text: line.slice(2) };
-      return { type: "p", text: line };
-    }),
-);
+const props = defineProps({ source: { type: String, default: '' } })
+const blocks = computed(() => parseMarkdown(props.source))
 </script>
 
 <template>
-  <div class="space-y-1 text-slate-700">
-    <template v-for="(block, index) in blocks" :key="index">
-      <h2 v-if="block.type === 'h2'" class="font-bold text-slate-900">{{ block.text }}</h2>
-      <ul v-else-if="block.type === 'li'" class="list-inside list-disc">
-        <li>{{ block.text }}</li>
+  <div class="space-y-2">
+    <template v-for="(block, i) in blocks" :key="i">
+      <ul v-if="block.type === 'ul'" class="list-disc pl-5">
+        <li v-for="(item, j) in block.items" :key="j"><InlineText :segments="item" /></li>
       </ul>
-      <p v-else>{{ block.text }}</p>
+      <p v-else><InlineText :segments="block.items[0]" /></p>
     </template>
   </div>
 </template>

@@ -1,33 +1,21 @@
-import { describe, expect, it } from "vitest";
-import { renderWithProviders } from "../../../test-utils";
-import AucationLayout from "./AucationLayout.vue";
-import { putAccessToken, getAccessToken } from "../../../helpers/apiHelper";
+import { screen, fireEvent, waitFor } from '@testing-library/vue'
+import { renderWithProviders } from '../../../test-utils.js'
+import AucationLayout from './AucationLayout.vue'
+import * as authApi from '../../auth/api/authApi.js'
+import * as userApi from '../../users/api/userApi.js'
 
-describe("AucationLayout", () => {
-  it("menampilkan navbar, sidebar, dan konten rute anak", async () => {
-    const child = { template: "<p>isi halaman</p>" };
-    const { wrapper } = await renderWithProviders(AucationLayout, {
-      routes: [{ path: "/", component: AucationLayout, children: [{ path: "", component: child }] }],
-    });
-    expect(wrapper.find("header").exists()).toBe(true);
-    expect(wrapper.find("aside").exists()).toBe(true);
-    expect(wrapper.find("main").text()).toContain("isi halaman");
-    wrapper.unmount();
-  });
+vi.mock('../../auth/api/authApi.js')
+vi.mock('../../users/api/userApi.js')
 
-  it("membuka drawer menu dan keluar dari akun", async () => {
-    putAccessToken("t");
-    const { wrapper, router } = await renderWithProviders(AucationLayout, { route: "/profile" });
-    const [menuButton, logoutButton] = wrapper.findAll("header button");
-
-    expect(wrapper.find("aside").classes()).toContain("hidden");
-    await menuButton.trigger("click");
-    expect(wrapper.find("aside").classes()).toContain("block");
-
-    await logoutButton.trigger("click");
-    await new Promise((resolve) => setTimeout(resolve));
-    expect(getAccessToken()).toBeNull();
-    expect(router.currentRoute.value.path).toBe("/auth/login");
-    wrapper.unmount();
-  });
-});
+it('shows the profile in the navbar and logs out', async () => {
+  localStorage.setItem('accessToken', 't')
+  authApi.logout.mockResolvedValue({ success: true })
+  userApi.getMe.mockResolvedValue({ success: true, data: { user: { name: 'Sari', email: 's@x.id', photo: '' } } })
+  const { router } = renderWithProviders(AucationLayout)
+  const push = vi.spyOn(router, 'push')
+  expect(await screen.findByRole('link', { name: 'Sari' })).toHaveAttribute('href', '/profile')
+  await fireEvent.click(screen.getByRole('button', { name: 'Keluar' }))
+  await waitFor(() => expect(push).toHaveBeenCalledWith('/auth/login'))
+  expect(localStorage.getItem('accessToken')).toBeNull()
+  expect(screen.getByRole('link', { name: 'Profil' })).toBeInTheDocument()
+})

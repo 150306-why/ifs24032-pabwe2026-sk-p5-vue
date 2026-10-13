@@ -1,47 +1,34 @@
-import { describe, expect, it, vi } from "vitest";
-import { mount, flushPromises } from "@vue/test-utils";
-import { createPinia } from "pinia";
-import { createMemoryHistory, createRouter } from "vue-router";
+import { render, screen, waitFor } from '@testing-library/vue'
+import { createPinia } from 'pinia'
+import { createMemoryHistory } from 'vue-router'
+import App from './App.vue'
+import { createAppRouter } from './router.js'
 
-vi.mock("sweetalert2", () => ({ default: { fire: vi.fn() } }));
-
-import App from "./App.vue";
-import { routes } from "./router";
-import { putAccessToken } from "./helpers/apiHelper";
-
-async function renderApp(path) {
-  const router = createRouter({ history: createMemoryHistory(), routes });
-  router.push(path);
-  await router.isReady();
-  const wrapper = mount(App, { global: { plugins: [createPinia(), router] }, attachTo: document.body });
-  await flushPromises();
-  return { wrapper, router };
+async function renderAt(path) {
+  const router = createAppRouter(createMemoryHistory())
+  router.push(path)
+  await router.isReady()
+  render(App, { global: { plugins: [createPinia(), router] } })
 }
 
-describe("App", () => {
-  it("menampilkan halaman login", async () => {
-    vi.stubGlobal("fetch", vi.fn());
-    const { wrapper } = await renderApp("/auth/login");
-    expect(wrapper.find("h1").text()).toBe("Masuk Akun");
-    wrapper.unmount();
-  });
+describe('App routing', () => {
+  it('renders login page', async () => {
+    await renderAt('/auth/login')
+    await waitFor(() => expect(document.querySelector('#login-submit-button')).toBeInTheDocument())
+  })
 
-  it("menampilkan halaman 404 untuk rute tidak dikenal", async () => {
-    const { wrapper } = await renderApp("/tidak-ada");
-    expect(wrapper.find("h1").text()).toContain("404");
-    wrapper.unmount();
-  });
+  it('renders register page', async () => {
+    await renderAt('/auth/register')
+    expect(await screen.findByText('Buat akun baru')).toBeInTheDocument()
+  })
 
-  it("menampilkan dashboard lelang untuk pengguna yang masuk", async () => {
-    putAccessToken("token");
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ data: { aucations: [] } }) }),
-    );
-    const { wrapper } = await renderApp("/");
-    expect(wrapper.find("h1").text()).toBe("Daftar Lelang");
-    expect(wrapper.text()).toContain("Belum ada lelang");
-    wrapper.unmount();
-    localStorage.clear();
-  });
-});
+  it('renders 404 for unknown path', async () => {
+    await renderAt('/nope')
+    expect(await screen.findByText('404')).toBeInTheDocument()
+  })
+
+  it('redirects / to login', async () => {
+    await renderAt('/')
+    expect(await screen.findByText('Masuk ke akun Anda')).toBeInTheDocument()
+  })
+})

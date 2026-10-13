@@ -1,24 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
+import { getUsers, getMe, updateMe, uploadPhoto, changePassword } from './userApi.js'
+import { requestJson } from '../../../helpers/apiHelper.js'
 
-const apiFetch = vi.hoisted(() => vi.fn());
-vi.mock("../../../helpers/apiHelper", () => ({ apiFetch }));
+vi.mock('../../../helpers/apiHelper.js', () => ({ requestJson: vi.fn() }))
 
-import { getMe, getUsers, postPhoto, putMe, putPassword } from "./userApi";
-
-describe("userApi", () => {
-  it("memanggil seluruh endpoint pengguna", () => {
-    const form = new FormData();
-    getUsers();
-    getMe();
-    putMe({ name: "a" });
-    postPhoto(form);
-    putPassword({ password: "x" });
-    expect(apiFetch.mock.calls).toEqual([
-      ["/users"],
-      ["/users/me"],
-      ["/users/me", { method: "PUT", body: { name: "a" } }],
-      ["/users/me/photo", { method: "POST", form }],
-      ["/users/me/password", { method: "PUT", body: { password: "x" } }],
-    ]);
-  });
-});
+it('calls the user endpoints', () => {
+  getUsers(); getMe(); updateMe({ name: 'a' }); changePassword({ password: 'x' }); uploadPhoto(new File(['x'], 'p.png'))
+  expect(requestJson.mock.calls.map((c) => c[0])).toEqual(
+    ['/users', '/users/me', '/users/me', '/users/password', '/users/me/photo'])
+  expect(requestJson.mock.calls[2][1]).toEqual({ method: 'PUT', body: '{"name":"a"}' })
+  expect(requestJson.mock.calls[4][1].body).toBeInstanceOf(FormData)
+})

@@ -1,65 +1,52 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { setActivePinia, createPinia } from 'pinia'
+import { useAuthStore } from './authStore.js'
+import * as api from '../api/authApi.js'
 
-const api = vi.hoisted(() => ({ postLogin: vi.fn(), postRegister: vi.fn() }));
-vi.mock("../api/authApi", () => api);
+vi.mock('../api/authApi.js')
 
-import { createMockPinia } from "../../../test-utils";
-import { getAccessToken, putAccessToken } from "../../../helpers/apiHelper";
-import { useAuthStore } from "./authStore";
+describe('authStore', () => {
+  beforeEach(() => setActivePinia(createPinia()))
 
-describe("authStore", () => {
-  beforeEach(() => {
-    localStorage.clear();
-    vi.resetAllMocks();
-    createMockPinia();
-  });
+  it('logs in and stores token', async () => {
+    api.login.mockResolvedValue({ success: true, data: { token: 't1' } })
+    const s = useAuthStore()
+    await s.loginUser({})
+    expect(s.token).toBe('t1')
+    expect(s.isAuthLogin).toBe(true)
+    expect(localStorage.getItem('accessToken')).toBe('t1')
+  })
 
-  it("membaca token awal dari localStorage", () => {
-    putAccessToken("lama");
-    const store = useAuthStore();
-    expect(store.token).toBe("lama");
-    expect(store.isAuthenticated).toBe(true);
-  });
+  it('keeps state on failed login', async () => {
+    api.login.mockResolvedValue({ success: false })
+    const s = useAuthStore()
+    await s.loginUser({})
+    expect(s.isAuthLogin).toBe(false)
+    expect(s.token).toBeNull()
+  })
 
-  it("login menyimpan token", async () => {
-    api.postLogin.mockResolvedValue({ message: "Masuk", data: { token: "baru" } });
-    const store = useAuthStore();
-    expect(store.isAuthenticated).toBe(false);
+  it('registers', async () => {
+    api.register.mockResolvedValue({ success: true })
+    const s = useAuthStore()
+    await s.registerUser({})
+    expect(s.isAuthRegister).toBe(true)
+  })
 
-    expect(await store.login({ email: "a" })).toBe("Masuk");
+  it('clears local state even when the logout request fails', async () => {
+    localStorage.setItem('accessToken', 'x')
+    api.logout.mockRejectedValue(new Error('offline'))
+    const s = useAuthStore()
+    await expect(s.logoutUser()).rejects.toThrow('offline')
+    expect(s.token).toBeNull()
+    expect(localStorage.getItem('accessToken')).toBeNull()
+  })
 
-    expect(getAccessToken()).toBe("baru");
-    expect(store.isAuthenticated).toBe(true);
-    expect(store.isAuthLogin).toBe(false);
-  });
-
-  it("login yang gagal tetap mematikan status loading", async () => {
-    api.postLogin.mockRejectedValue(new Error("salah"));
-    const store = useAuthStore();
-    await expect(store.login({})).rejects.toThrow("salah");
-    expect(store.isAuthLogin).toBe(false);
-  });
-
-  it("register mengembalikan pesan", async () => {
-    api.postRegister.mockResolvedValue({ message: "Terdaftar" });
-    const store = useAuthStore();
-    expect(await store.register({})).toBe("Terdaftar");
-    expect(store.isAuthRegister).toBe(false);
-  });
-
-  it("register yang gagal tetap mematikan status loading", async () => {
-    api.postRegister.mockRejectedValue(new Error("gagal"));
-    const store = useAuthStore();
-    await expect(store.register({})).rejects.toThrow("gagal");
-    expect(store.isAuthRegister).toBe(false);
-  });
-
-  it("logout menghapus token", () => {
-    putAccessToken("x");
-    const store = useAuthStore();
-    store.logout();
-    expect(getAccessToken()).toBeNull();
-    expect(store.token).toBeNull();
-    expect(store.isAuthLogout).toBe(false);
-  });
-});
+  it('logs out', async () => {
+    localStorage.setItem('accessToken', 'x')
+    api.logout.mockResolvedValue({ success: true })
+    const s = useAuthStore()
+    await s.logoutUser()
+    expect(s.token).toBeNull()
+    expect(s.isAuthLogout).toBe(true)
+    expect(localStorage.getItem('accessToken')).toBeNull()
+  })
+})

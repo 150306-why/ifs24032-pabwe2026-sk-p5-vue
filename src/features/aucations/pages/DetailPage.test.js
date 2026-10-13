@@ -1,169 +1,186 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { flushPromises } from "@vue/test-utils";
+import { screen, fireEvent, waitFor } from '@testing-library/vue'
+import { renderWithProviders } from '../../../test-utils.js'
+import DetailPage from './DetailPage.vue'
+import * as api from '../api/aucationApi.js'
+import { useUsersStore } from '../../users/states/usersStore.js'
+import { showSuccessDialog, showErrorDialog, showConfirmDialog } from '../../../helpers/toolsHelper.js'
 
-const dialogs = vi.hoisted(() => ({
-  showErrorDialog: vi.fn(),
-  showSuccessDialog: vi.fn(),
-  showConfirmDialog: vi.fn(),
-}));
-const api = vi.hoisted(() => ({
-  getAucation: vi.fn(),
-  deleteAucation: vi.fn(),
-  deleteBid: vi.fn(),
-  postBid: vi.fn(),
-  putAucation: vi.fn(),
-  postCover: vi.fn(),
-}));
-const userApi = vi.hoisted(() => ({ getMe: vi.fn() }));
-vi.mock("../../../helpers/toolsHelper", async (original) => ({ ...(await original()), ...dialogs }));
-vi.mock("../api/aucationApi", () => api);
-vi.mock("../../users/api/userApi", () => userApi);
+vi.mock('../api/aucationApi.js')
+vi.mock('../../../helpers/toolsHelper.js', async (orig) => ({
+  ...(await orig()), showSuccessDialog: vi.fn(), showErrorDialog: vi.fn(), showConfirmDialog: vi.fn(),
+}))
 
-import { renderWithProviders } from "../../../test-utils";
-import DetailPage from "./DetailPage.vue";
+const detail = (extra = {}) => ({
+  success: true,
+  data: { aucation: { id: 7, user_id: 1, title: 'Lukisan', description: '**Cat** minyak', start_bid: 150000, closed_at: '2099-12-01 00:00:00', bids: [{ id: 1, bid: 200000, created_at: '2026-10-05T08:44:12.000000Z', user: { name: 'Budi' } }, { id: 2, bid: 100000, created_at: '2026-10-04T08:00:00.000000Z' }], author: { name: 'Sari', photo: '' }, ...extra } },
+})
+const click = (name) => fireEvent.click(screen.getByRole('button', { name }))
+const noDialog = () => expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 
-const future = new Date(Date.now() + 86_400_000).toISOString();
-const base = {
-  id: 9,
-  title: "Jam Antik",
-  description: "# Spesifikasi\n- Kuno",
-  start_bid: 1000,
-  closed_at: future,
-  user_id: 1,
-  cover: "/c.png",
-  bids: [{ id: 1, bid: 1500, user: { name: "Budi" } }],
-};
+async function mount({ me = 99 } = {}) {
+  const utils = renderWithProviders(DetailPage, { route: '/aucations/7' })
+  if (me) useUsersStore(utils.pinia).profile = { id: me }
+  await screen.findByText('Lukisan')
+  await waitFor(() => expect(api.getAucation).toHaveBeenCalledWith('7'))
+  return utils
+}
 
-const render = (aucation = base, profileId = 1) => {
-  api.getAucation.mockResolvedValue({ data: { aucation } });
-  userApi.getMe.mockResolvedValue({ data: { user: { id: profileId } } });
-  return renderWithProviders(DetailPage, {
-    route: "/aucations/9",
-    routes: [{ path: "/aucations/:aucationId", component: DetailPage }],
-  });
-};
+describe('DetailPage', () => {
+  beforeEach(() => { vi.clearAllMocks(); api.getAucation.mockResolvedValue(detail()) })
 
-describe("DetailPage", () => {
-  beforeEach(() => vi.resetAllMocks());
+  it('renders details, markdown and bids without a cover', async () => {
+    await mount()
+    expect(screen.getByText('Rp 200.000')).toBeInTheDocument()
+    expect(screen.getByText('Cat').tagName).toBe('STRONG')
+    expect(screen.getByText('Sari')).toBeInTheDocument()
+    expect(screen.getByText('oleh Budi')).toBeInTheDocument()
+    expect(screen.getAllByRole('listitem')[0]).toHaveTextContent('Rp 200.000')
+    expect(screen.getByRole('button', { name: 'Tawar' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Ubah lelang' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Hapus lelang' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: 'Sampul Lukisan' })).not.toBeInTheDocument()
+  })
 
-  it("menampilkan detail lelang, markdown, dan riwayat tawaran", async () => {
-    const { wrapper } = await render();
-    expect(api.getAucation).toHaveBeenCalledWith("9");
-    expect(wrapper.find("h1").text()).toBe("Jam Antik");
-    expect(wrapper.findAll("h2")[0].text()).toBe("Spesifikasi");
-    expect(wrapper.text()).toContain("Budi");
-    expect(wrapper.text()).toContain("Berlangsung");
-    expect(wrapper.find("img").attributes("alt")).toBe("Cover Jam Antik");
-    wrapper.unmount();
-  });
+  it('shows only management actions to the owner', async () => {
+    await mount({ me: 1 })
+    for (const name of ['Ubah lelang', 'Ubah sampul', 'Hapus lelang']) expect(screen.getByRole('button', { name })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Tawar' })).not.toBeInTheDocument()
+  })
 
-  it("menampilkan lelang tanpa cover, tanpa tawaran, dan sudah ditutup", async () => {
-    const { wrapper } = await render({ ...base, cover: undefined, bids: undefined, is_closed: true });
-    expect(wrapper.find("article img").exists()).toBe(false);
-    expect(wrapper.text()).toContain("Belum ada penawaran");
-    expect(wrapper.text()).toContain("Ditutup");
-    wrapper.unmount();
-  });
+  it('hides all actions until the profile is loaded', async () => {
+    await mount({ me: null })
+    expect(screen.queryByRole('button', { name: 'Tawar' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Hapus lelang' })).not.toBeInTheDocument()
+  })
 
-  it("pemilik dapat mengubah lelang dan mengganti cover lewat modal", async () => {
-    const { wrapper } = await render();
-    expect(wrapper.find("article > div").text()).not.toContain("Ajukan tawaran");
-    const buttons = wrapper.findAll("article > div button");
-    await buttons[0].trigger("click");
-    expect(wrapper.find("#change-title").exists()).toBe(true);
-    await buttons[1].trigger("click");
-    expect(wrapper.find("#cover-input").exists()).toBe(true);
-    wrapper.unmount();
-  });
+  it('shows the highest bid in the bid modal', async () => {
+    await mount()
+    await click('Tawar')
+    expect(screen.getByRole('dialog')).toHaveTextContent('Penawaran tertinggi saat ini Rp 200.000')
+  })
 
-  it("pemilik dapat menghapus lelang setelah konfirmasi", async () => {
-    dialogs.showConfirmDialog.mockResolvedValue(true);
-    api.deleteAucation.mockResolvedValue({ message: "Terhapus" });
-    const { wrapper, router } = await render();
-    await wrapper.findAll("article > div button")[2].trigger("click");
-    await flushPromises();
+  it('blocks a bid that is not higher than the current highest bid', async () => {
+    await mount()
+    await click('Tawar')
+    await fireEvent.update(screen.getByLabelText('Nominal penawaran'), '100000')
+    await click('Kirim penawaran')
+    expect(showErrorDialog).toHaveBeenCalledWith('Penawaran harus lebih tinggi dari Rp 200.000')
+    expect(api.addBid).not.toHaveBeenCalled()
+  })
 
-    expect(api.deleteAucation).toHaveBeenCalledWith("9");
-    expect(dialogs.showSuccessDialog).toHaveBeenCalledWith("Terhapus");
-    expect(router.currentRoute.value.path).toBe("/");
-    wrapper.unmount();
-  });
+  it('hides bidding once the aucation is closed', async () => {
+    api.getAucation.mockResolvedValue(detail({ closed_at: '2000-01-01 00:00:00' }))
+    await mount()
+    expect(screen.getByRole('status')).toHaveTextContent('Lelang sudah ditutup')
+    expect(screen.queryByRole('button', { name: 'Tawar' })).not.toBeInTheDocument()
+  })
 
-  it("tidak menghapus jika konfirmasi dibatalkan", async () => {
-    dialogs.showConfirmDialog.mockResolvedValue(false);
-    const { wrapper } = await render();
-    await wrapper.findAll("article > div button")[2].trigger("click");
-    await flushPromises();
-    expect(api.deleteAucation).not.toHaveBeenCalled();
-    wrapper.unmount();
-  });
+  it('lets a bidder cancel an existing bid instead of bidding again', async () => {
+    api.getAucation.mockResolvedValue(detail({ my_bid: { id: 2, bid: 250000 } }))
+    await mount()
+    expect(screen.getByText('Rp 250.000')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Tawar' })).not.toBeInTheDocument()
+    showConfirmDialog.mockResolvedValueOnce(false).mockResolvedValue(true)
+    api.deleteBid.mockResolvedValueOnce({ success: false, message: 'Gagal batal' }).mockResolvedValueOnce({ success: true, message: 'Dibatalkan' })
+    await click('Batalkan penawaran')
+    await waitFor(() => expect(showConfirmDialog).toHaveBeenCalled())
+    expect(api.deleteBid).not.toHaveBeenCalled()
+    await click('Batalkan penawaran')
+    await waitFor(() => expect(showErrorDialog).toHaveBeenCalledWith('Gagal batal'))
+    await click('Batalkan penawaran')
+    await waitFor(() => expect(showSuccessDialog).toHaveBeenCalledWith('Dibatalkan'))
+    expect(api.deleteBid).toHaveBeenLastCalledWith('7')
+  })
 
-  it("menampilkan dialog error saat penghapusan gagal", async () => {
-    dialogs.showConfirmDialog.mockResolvedValue(true);
-    api.deleteAucation.mockRejectedValue(new Error("Tidak boleh"));
-    const { wrapper } = await render();
-    await wrapper.findAll("article > div button")[2].trigger("click");
-    await flushPromises();
-    expect(dialogs.showErrorDialog).toHaveBeenCalledWith("Tidak boleh");
-    wrapper.unmount();
-  });
+  it('shows an empty state when there are no bids', async () => {
+    api.getAucation.mockResolvedValue(detail({ bids: [] }))
+    await mount()
+    expect(screen.getByText('Belum ada penawaran')).toBeInTheDocument()
+  })
 
-  it("peserta dapat mengajukan tawaran lewat modal", async () => {
-    const { wrapper } = await render(base, 2);
-    expect(wrapper.find("article > div").text()).not.toContain("Hapus lelang");
-    await wrapper.findAll("article > div button")[0].trigger("click");
-    expect(wrapper.find("#bid-input").exists()).toBe(true);
+  it('shows the cover when present', async () => {
+    api.getAucation.mockResolvedValue(detail({ cover: 'http://x/c.png' }))
+    await mount()
+    expect(screen.getByRole('img', { name: 'Sampul Lukisan' })).toBeInTheDocument()
+  })
 
-    api.postBid.mockResolvedValue({ message: "Tawaran dikirim" });
-    await wrapper.find("#bid-input").setValue("2000");
-    await wrapper.findAll("form").at(-1).trigger("submit");
-    await flushPromises();
-    expect(api.postBid).toHaveBeenCalledWith(9, { bid: 2000 });
-    expect(api.getAucation).toHaveBeenCalledTimes(2);
-    wrapper.unmount();
-  });
+  it('places a bid: error keeps the modal, success closes it and reloads', async () => {
+    await mount()
+    const before = api.getAucation.mock.calls.length
+    api.addBid.mockResolvedValueOnce({ success: false, message: 'Rendah' }).mockResolvedValueOnce({ success: true, message: 'Ok' })
+    await click('Tawar')
+    await fireEvent.update(screen.getByLabelText('Nominal penawaran'), '300000')
+    await click('Kirim penawaran')
+    await waitFor(() => expect(showErrorDialog).toHaveBeenCalledWith('Rendah'))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    await click('Kirim penawaran')
+    await waitFor(() => expect(showSuccessDialog).toHaveBeenCalledWith('Ok'))
+    expect(api.addBid).toHaveBeenLastCalledWith('7', { bid: 300000 })
+    await waitFor(noDialog)
+    expect(api.getAucation.mock.calls.length).toBeGreaterThan(before)
+  })
 
-  it("peserta dapat membatalkan tawaran", async () => {
-    api.deleteBid.mockResolvedValue({ message: "Tawaran dibatalkan" });
-    const { wrapper } = await render(base, 2);
-    await wrapper.findAll("article > div button")[1].trigger("click");
-    await flushPromises();
+  it('edits the aucation', async () => {
+    await mount({ me: 1 })
+    api.changeAucation.mockResolvedValueOnce({ success: false, message: 'Gagal ubah' }).mockResolvedValueOnce({ success: true, message: 'Diubah' })
+    await click('Ubah lelang')
+    await fireEvent.update(screen.getByLabelText('Judul'), 'Baru')
+    await fireEvent.update(screen.getByLabelText('Deskripsi'), 'Desc baru')
+    await fireEvent.update(screen.getByLabelText('Harga awal'), '200000')
+    await fireEvent.update(screen.getByLabelText('Ditutup pada'), '2027-01-01T08:00')
+    await click('Simpan perubahan')
+    await waitFor(() => expect(showErrorDialog).toHaveBeenCalledWith('Gagal ubah'))
+    await click('Simpan perubahan')
+    await waitFor(() => expect(showSuccessDialog).toHaveBeenCalledWith('Diubah'))
+    expect(api.changeAucation).toHaveBeenLastCalledWith('7', { title: 'Baru', description: 'Desc baru', start_bid: 200000, closed_at: '2027-01-01 08:00:00' })
+    await waitFor(noDialog)
+  })
 
-    expect(api.deleteBid).toHaveBeenCalledWith("9");
-    expect(dialogs.showSuccessDialog).toHaveBeenCalledWith("Tawaran dibatalkan");
-    expect(api.getAucation).toHaveBeenCalledTimes(2);
-    wrapper.unmount();
-  });
+  it('changes the cover', async () => {
+    await mount({ me: 1 })
+    api.changeCover.mockResolvedValueOnce({ success: false, message: 'Besar' }).mockResolvedValueOnce({ success: true, message: 'Sampul' })
+    const file = new File(['x'], 'c.png', { type: 'image/png' })
+    await click('Ubah sampul')
+    await fireEvent.change(screen.getByLabelText('File sampul'), { target: { files: [file] } })
+    await waitFor(() => expect(showErrorDialog).toHaveBeenCalledWith('Besar'))
+    await fireEvent.change(screen.getByLabelText('File sampul'), { target: { files: [file] } })
+    await waitFor(() => expect(showSuccessDialog).toHaveBeenCalledWith('Sampul'))
+    expect(api.changeCover).toHaveBeenLastCalledWith('7', file)
+    await waitFor(noDialog)
+  })
 
-  it("menampilkan dialog error saat pembatalan tawaran gagal", async () => {
-    api.deleteBid.mockRejectedValue(new Error("Belum menawar"));
-    const { wrapper } = await render(base, 2);
-    await wrapper.findAll("article > div button")[1].trigger("click");
-    await flushPromises();
-    expect(dialogs.showErrorDialog).toHaveBeenCalledWith("Belum menawar");
-    wrapper.unmount();
-  });
+  it('closes the bid modal with Escape', async () => {
+    await mount()
+    await click('Tawar')
+    await fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
+    noDialog()
+  })
 
-  it("menampilkan status memuat", async () => {
-    api.getAucation.mockReturnValue(new Promise(() => {}));
-    userApi.getMe.mockResolvedValue({ data: { user: { id: 1 } } });
-    const { wrapper } = await renderWithProviders(DetailPage, {
-      route: "/aucations/9",
-      routes: [{ path: "/aucations/:aucationId", component: DetailPage }],
-    });
-    expect(wrapper.find('[role="status"]').exists()).toBe(true);
-    wrapper.unmount();
-  });
+  it('closes the owner modals with Escape', async () => {
+    await mount({ me: 1 })
+    for (const name of ['Ubah lelang', 'Ubah sampul']) {
+      await click(name)
+      await fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
+      noDialog()
+    }
+  })
 
-  it("menampilkan pesan saat lelang tidak ditemukan", async () => {
-    api.getAucation.mockRejectedValue(new Error("Lelang tidak ada"));
-    userApi.getMe.mockResolvedValue({ data: { user: { id: 1 } } });
-    const { wrapper } = await renderWithProviders(DetailPage, {
-      route: "/aucations/9",
-      routes: [{ path: "/aucations/:aucationId", component: DetailPage }],
-    });
-    expect(wrapper.find("h1").text()).toBe("Lelang tidak ditemukan");
-    expect(wrapper.find('[role="alert"]').text()).toBe("Lelang tidak ada");
-    wrapper.unmount();
-  });
-});
+  it('does nothing when deletion is cancelled', async () => {
+    await mount({ me: 1 })
+    showConfirmDialog.mockResolvedValue(false)
+    await click('Hapus lelang')
+    await waitFor(() => expect(showConfirmDialog).toHaveBeenCalled())
+    expect(api.deleteAucation).not.toHaveBeenCalled()
+  })
+
+  it('deletes and goes home, or shows an error', async () => {
+    const { router } = await mount({ me: 1 })
+    const push = vi.spyOn(router, 'push')
+    showConfirmDialog.mockResolvedValue(true)
+    api.deleteAucation.mockResolvedValueOnce({ success: false, message: 'Tidak bisa' }).mockResolvedValueOnce({ success: true, message: 'Dihapus' })
+    await click('Hapus lelang')
+    await waitFor(() => expect(showErrorDialog).toHaveBeenCalledWith('Tidak bisa'))
+    await click('Hapus lelang')
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/'))
+  })
+})

@@ -1,32 +1,25 @@
-import { describe, expect, it, vi } from "vitest";
+import * as api from './aucationApi.js'
+import { requestJson } from '../../../helpers/apiHelper.js'
 
-const apiFetch = vi.hoisted(() => vi.fn());
-vi.mock("../../../helpers/apiHelper", () => ({ apiFetch }));
+vi.mock('../../../helpers/apiHelper.js', () => ({ requestJson: vi.fn() }))
 
-import * as api from "./aucationApi";
+describe('aucationApi', () => {
+  beforeEach(() => requestJson.mockClear())
 
-describe("aucationApi", () => {
-  it("memanggil seluruh endpoint lelang", () => {
-    const form = new FormData();
-    api.getAucations({ is_me: 1 });
-    api.getAucation(7);
-    api.postAucation({ title: "t" });
-    api.putAucation(7, { title: "u" });
-    api.postCover(7, form);
-    api.deleteAucation(7);
-    api.postBid(7, { bid: 9 });
-    api.deleteBid(7);
-    api.deleteAllAucations();
-    expect(apiFetch.mock.calls).toEqual([
-      ["/aucations", { params: { is_me: 1 } }],
-      ["/aucations/7"],
-      ["/aucations", { method: "POST", body: { title: "t" } }],
-      ["/aucations/7", { method: "PUT", body: { title: "u" } }],
-      ["/aucations/7/cover", { method: "POST", form }],
-      ["/aucations/7", { method: "DELETE" }],
-      ["/aucations/7/bids", { method: "POST", body: { bid: 9 } }],
-      ["/aucations/7/bids", { method: "DELETE" }],
-      ["/aucations", { method: "DELETE" }],
-    ]);
-  });
-});
+  it('builds the list url with and without filters', () => {
+    api.getAucations()
+    api.getAucations({ is_me: true, is_closed: false })
+    expect(requestJson.mock.calls[0][0]).toBe('/aucations')
+    expect(requestJson.mock.calls[1][0]).toBe('/aucations?is_me=1&is_closed=0')
+  })
+
+  it('calls every other endpoint', () => {
+    api.getAucation(1); api.addAucation({ a: 1 }); api.changeAucation(1, { a: 2 }); api.changeCover(1, new File(['x'], 'c.png'))
+    api.deleteAucation(1); api.deleteAucations(); api.addBid(1, { bid: 5 }); api.deleteBid(1)
+    expect(requestJson.mock.calls.map((c) => [c[0], c[1]?.method])).toEqual([
+      ['/aucations/1', undefined], ['/aucations', 'POST'], ['/aucations/1', 'PUT'], ['/aucations/1/cover', 'POST'],
+      ['/aucations/1', 'DELETE'], ['/aucations', 'DELETE'], ['/aucations/1/bids', 'POST'], ['/aucations/1/bids', 'DELETE'],
+    ])
+    expect(requestJson.mock.calls[3][1].body).toBeInstanceOf(FormData)
+  })
+})

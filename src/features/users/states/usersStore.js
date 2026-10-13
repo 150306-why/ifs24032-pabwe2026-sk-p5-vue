@@ -1,42 +1,32 @@
-import { defineStore } from "pinia";
-import { ref } from "vue";
-import { getMe, getUsers, postPhoto, putMe, putPassword } from "../api/userApi";
-import { unwrap } from "../../../helpers/apiHelper";
+import { defineStore } from 'pinia'
+import { ref } from 'vue'
+import * as api from '../api/userApi.js'
 
-export const useUsersStore = defineStore("users", () => {
-  const users = ref([]);
-  const user = ref(null);
-  const profile = ref(null);
-  const isProfileChange = ref(false);
-  const isPhotoChange = ref(false);
-  const isPasswordChange = ref(false);
+export const useUsersStore = defineStore('users', () => {
+  const users = ref([])
+  const profile = ref(null)
 
-  async function fetchUsers() {
-    users.value = unwrap(await getUsers(), "users") ?? [];
+  async function loadUsers() {
+    const res = await api.getUsers()
+    if (res.success) users.value = res.data.users
+    return res
   }
-
-  async function fetchProfile() {
-    profile.value = user.value = unwrap(await getMe(), "user");
+  async function loadProfile() {
+    const res = await api.getMe()
+    if (res.success) profile.value = res.data.user
+    return res
   }
-
-  async function mutate(flag, call) {
-    flag.value = true;
-    try {
-      const json = await call();
-      await fetchProfile();
-      return json.message;
-    } finally {
-      flag.value = false;
-    }
+  async function saveProfile(payload) {
+    const res = await api.updateMe(payload)
+    if (res.success) await loadProfile()
+    return res
   }
+  async function savePhoto(file) {
+    const res = await api.uploadPhoto(file)
+    if (res.success) await loadProfile()
+    return res
+  }
+  const savePassword = (payload) => api.changePassword(payload)
 
-  const changeProfile = (body) => mutate(isProfileChange, () => putMe(body));
-  const changePhoto = (form) => mutate(isPhotoChange, () => postPhoto(form));
-  const changePassword = (body) => mutate(isPasswordChange, () => putPassword(body));
-
-  return {
-    users, user, profile,
-    isProfileChange, isPhotoChange, isPasswordChange,
-    fetchUsers, fetchProfile, changeProfile, changePhoto, changePassword,
-  };
-});
+  return { users, profile, loadUsers, loadProfile, saveProfile, savePhoto, savePassword }
+})

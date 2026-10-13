@@ -1,56 +1,40 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import Swal from 'sweetalert2'
+import { showSuccessDialog, showErrorDialog, showConfirmDialog, formatRupiah, formatDate, toApiTimestamp, toInputTimestamp, photoUrl, isClosedAt } from './toolsHelper.js'
 
-const fire = vi.hoisted(() => vi.fn());
-vi.mock("sweetalert2", () => ({ default: { fire } }));
+vi.mock('sweetalert2', () => ({ default: { fire: vi.fn() } }))
 
-import {
-  formatDate,
-  formatRupiah,
-  getHighestBid,
-  isAucationClosed,
-  showConfirmDialog,
-  showErrorDialog,
-  showSuccessDialog,
-} from "./toolsHelper";
+describe('toolsHelper', () => {
+  it('shows success and error dialogs', () => {
+    showSuccessDialog('ok')
+    showErrorDialog('bad')
+    expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ icon: 'success', text: 'ok' }))
+    expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ icon: 'error', text: 'bad' }))
+  })
 
-describe("toolsHelper", () => {
-  beforeEach(() => fire.mockReset());
+  it('returns confirm result', async () => {
+    Swal.fire.mockResolvedValueOnce({ isConfirmed: true })
+    expect(await showConfirmDialog('sure?')).toBe(true)
+  })
 
-  it("menampilkan dialog sukses dan error", async () => {
-    fire.mockResolvedValue({});
-    await showSuccessDialog("ok");
-    await showErrorDialog("gagal");
-    expect(fire).toHaveBeenNthCalledWith(1, expect.objectContaining({ icon: "success", text: "ok" }));
-    expect(fire).toHaveBeenNthCalledWith(2, expect.objectContaining({ icon: "error", text: "gagal" }));
-  });
+  it('formats rupiah and date', () => {
+    expect(formatRupiah(150000)).toBe('Rp 150.000')
+    expect(formatDate('2026-01-05T00:00:00Z')).toContain('2026')
+  })
 
-  it("mengembalikan hasil konfirmasi", async () => {
-    fire.mockResolvedValueOnce({ isConfirmed: true }).mockResolvedValueOnce({ isConfirmed: false });
-    expect(await showConfirmDialog("hapus?")).toBe(true);
-    expect(await showConfirmDialog("hapus?")).toBe(false);
-  });
+  it('converts timestamps between the input and API formats', () => {
+    expect(toApiTimestamp('2026-12-01T10:00')).toBe('2026-12-01 10:00:00')
+    expect(toInputTimestamp('2024-10-05 22:00:00')).toBe('2024-10-05T22:00')
+    expect(formatDate('2024-10-05 22:00:00')).toContain('2024')
+  })
 
-  it("memformat rupiah", () => {
-    expect(formatRupiah(15000).replace(/\s/g, " ")).toContain("15.000");
-    expect(formatRupiah("abc")).toContain("0");
-  });
+  it('resolves photo urls', () => {
+    expect(photoUrl('')).toBe('')
+    expect(photoUrl('https://x.id/a.png')).toBe('https://x.id/a.png')
+    expect(photoUrl('img/profile/1.png')).toBe('https://open-api.delcom.org/img/profile/1.png')
+  })
 
-  it("memformat tanggal", () => {
-    expect(formatDate("")).toBe("-");
-    expect(formatDate("2026-01-02T03:04:00Z")).toContain("2026");
-  });
-
-  it("menghitung tawaran tertinggi", () => {
-    expect(getHighestBid({ highest_bid: 500, start_bid: 100 })).toBe(500);
-    expect(getHighestBid({ start_bid: 100 })).toBe(100);
-    expect(getHighestBid({})).toBe(0);
-  });
-
-  it("menentukan lelang ditutup", () => {
-    const future = new Date(Date.now() + 86_400_000).toISOString();
-    const past = new Date(Date.now() - 86_400_000).toISOString();
-    expect(isAucationClosed({ is_closed: 1, closed_at: future })).toBe(true);
-    expect(isAucationClosed({ closed_at: past })).toBe(true);
-    expect(isAucationClosed({ closed_at: future })).toBe(false);
-  });
-});
+  it('tells whether a closing time has passed', () => {
+    expect(isClosedAt('2000-01-01 00:00:00')).toBe(true)
+    expect(isClosedAt('2099-01-01 00:00:00')).toBe(false)
+  })
+})

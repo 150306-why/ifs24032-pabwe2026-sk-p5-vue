@@ -1,83 +1,41 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  apiFetch,
-  getAccessToken,
-  putAccessToken,
-  removeAccessToken,
-  unwrap,
-} from "./apiHelper";
+import { getAccessToken, putAccessToken, removeAccessToken, fetchWithAuth, requestJson, normalizeResponse } from './apiHelper.js'
 
-const mockFetch = (response) => vi.fn().mockResolvedValue(response);
-const okResponse = (json) => ({ ok: true, json: () => Promise.resolve(json) });
+describe('apiHelper', () => {
+  beforeEach(() => vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ json: async () => ({ status: 'success' }) })))
+  afterEach(() => vi.unstubAllGlobals())
 
-describe("apiHelper", () => {
-  beforeEach(() => localStorage.clear());
-  afterEach(() => vi.unstubAllGlobals());
+  it('stores, reads and removes token', () => {
+    putAccessToken('abc')
+    expect(getAccessToken()).toBe('abc')
+    removeAccessToken()
+    expect(getAccessToken()).toBeNull()
+  })
 
-  it("menyimpan, membaca, dan menghapus token", () => {
-    expect(getAccessToken()).toBeNull();
-    putAccessToken("abc");
-    expect(getAccessToken()).toBe("abc");
-    removeAccessToken();
-    expect(getAccessToken()).toBeNull();
-  });
+  it('sends no Authorization header without token', async () => {
+    await fetchWithAuth('/x')
+    expect(fetch.mock.calls[0][1].headers).toEqual({ Accept: 'application/json', 'Content-Type': 'application/json' })
+  })
 
-  it("mengirim GET tanpa header otorisasi dan mengabaikan parameter kosong", async () => {
-    const fetchMock = mockFetch(okResponse({ success: true }));
-    vi.stubGlobal("fetch", fetchMock);
+  it('adds bearer token and merges custom headers', async () => {
+    putAccessToken('abc')
+    await fetchWithAuth('/x', { method: 'POST', headers: { 'X-A': '1' } })
+    expect(fetch.mock.calls[0][1].headers).toEqual({
+      Accept: 'application/json', 'Content-Type': 'application/json', Authorization: 'Bearer abc', 'X-A': '1',
+    })
+  })
 
-    const result = await apiFetch("/aucations", { params: { is_me: 1, is_closed: "", q: null, zero: 0 } });
+  it('drops content type for FormData', async () => {
+    await fetchWithAuth('/x', { body: new FormData() })
+    expect(fetch.mock.calls[0][1].headers).toEqual({ Accept: 'application/json' })
+  })
 
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url.pathname.endsWith("/aucations")).toBe(true);
-    expect(url.searchParams.get("is_me")).toBe("1");
-    expect(url.searchParams.get("zero")).toBe("0");
-    expect(url.searchParams.has("is_closed")).toBe(false);
-    expect(url.searchParams.has("q")).toBe(false);
-    expect(init).toEqual({ method: "GET", headers: {}, body: undefined });
-    expect(result).toEqual({ success: true });
-  });
+  it('requestJson prefixes base url and parses json', async () => {
+    expect(await requestJson('/users')).toEqual({ status: 'success', success: true })
+    expect(fetch.mock.calls[0][0]).toBe('/api/v1/users')
+  })
 
-  it("mengirim body JSON beserta token Bearer", async () => {
-    putAccessToken("token-1");
-    const fetchMock = mockFetch(okResponse({ success: true }));
-    vi.stubGlobal("fetch", fetchMock);
-
-    await apiFetch("/auth/login", { method: "POST", body: { a: 1 } });
-
-    const init = fetchMock.mock.calls[0][1];
-    expect(init.headers).toEqual({ Authorization: "Bearer token-1", "Content-Type": "application/json" });
-    expect(init.body).toBe('{"a":1}');
-  });
-
-  it("mengirim FormData apa adanya", async () => {
-    const form = new FormData();
-    const fetchMock = mockFetch(okResponse({}));
-    vi.stubGlobal("fetch", fetchMock);
-
-    await apiFetch("/upload", { method: "POST", form });
-
-    expect(fetchMock.mock.calls[0][1].body).toBe(form);
-  });
-
-  it("melempar pesan dari server saat response tidak ok", async () => {
-    vi.stubGlobal("fetch", mockFetch({ ok: false, json: () => Promise.resolve({ message: "Ditolak" }) }));
-    await expect(apiFetch("/x")).rejects.toThrow("Ditolak");
-  });
-
-  it("melempar pesan bawaan saat success false tanpa pesan", async () => {
-    vi.stubGlobal("fetch", mockFetch(okResponse({ success: false })));
-    await expect(apiFetch("/x")).rejects.toThrow("Terjadi kesalahan pada server");
-  });
-
-  it("menangani response bukan JSON", async () => {
-    vi.stubGlobal("fetch", mockFetch({ ok: false, json: () => Promise.reject(new Error("bad")) }));
-    await expect(apiFetch("/x")).rejects.toThrow("Terjadi kesalahan pada server");
-  });
-
-  it("unwrap mengambil key jika ada, atau data itu sendiri", () => {
-    expect(unwrap({ data: { users: [1] } }, "users")).toEqual([1]);
-    expect(unwrap({ data: [2] }, "users")).toEqual([2]);
-    expect(unwrap({}, "users")).toBeUndefined();
-  });
-});
+  it('marks only status "success" as success', () => {
+    expect(normalizeResponse({ status: 'fail' }).success).toBe(false)
+    expect(normalizeResponse({ status: 'success' }).success).toBe(true)
+  })
+})

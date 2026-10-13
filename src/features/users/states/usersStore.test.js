@@ -1,64 +1,46 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { setActivePinia, createPinia } from 'pinia'
+import { useUsersStore } from './usersStore.js'
+import * as api from '../api/userApi.js'
 
-const api = vi.hoisted(() => ({
-  getUsers: vi.fn(),
-  getMe: vi.fn(),
-  putMe: vi.fn(),
-  postPhoto: vi.fn(),
-  putPassword: vi.fn(),
-}));
-vi.mock("../api/userApi", () => api);
+vi.mock('../api/userApi.js')
+const ok = (data) => ({ success: true, data })
+const fail = { success: false }
 
-import { createMockPinia } from "../../../test-utils";
-import { useUsersStore } from "./usersStore";
+describe('usersStore', () => {
+  beforeEach(() => { setActivePinia(createPinia()); vi.resetAllMocks() })
 
-describe("usersStore", () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-    createMockPinia();
-    api.getMe.mockResolvedValue({ data: { user: { id: 1, name: "Ifs" } } });
-  });
+  it('loads users on success and ignores failure', async () => {
+    const s = useUsersStore()
+    api.getUsers.mockResolvedValueOnce(ok({ users: [{ id: 1 }] }))
+    await s.loadUsers()
+    expect(s.users).toEqual([{ id: 1 }])
+    api.getUsers.mockResolvedValueOnce(fail)
+    await s.loadUsers()
+    expect(s.users).toEqual([{ id: 1 }])
+  })
 
-  it("mengambil daftar pengguna", async () => {
-    api.getUsers.mockResolvedValue({ data: { users: [{ id: 1 }] } });
-    const store = useUsersStore();
-    await store.fetchUsers();
-    expect(store.users).toEqual([{ id: 1 }]);
-  });
+  it('loads profile on success and ignores failure', async () => {
+    const s = useUsersStore()
+    api.getMe.mockResolvedValueOnce(fail)
+    await s.loadProfile()
+    expect(s.profile).toBeNull()
+    api.getMe.mockResolvedValueOnce(ok({ user: { name: 'A' } }))
+    await s.loadProfile()
+    expect(s.profile).toEqual({ name: 'A' })
+  })
 
-  it("memakai array kosong jika data kosong", async () => {
-    api.getUsers.mockResolvedValue({});
-    const store = useUsersStore();
-    await store.fetchUsers();
-    expect(store.users).toEqual([]);
-  });
+  it('reloads profile after successful save and photo upload only', async () => {
+    const s = useUsersStore()
+    api.getMe.mockResolvedValue(ok({ user: { name: 'B' } }))
+    api.updateMe.mockResolvedValueOnce(ok({})).mockResolvedValueOnce(fail)
+    api.uploadPhoto.mockResolvedValueOnce(ok({})).mockResolvedValueOnce(fail)
+    await s.saveProfile({}); await s.saveProfile({})
+    await s.savePhoto({}); await s.savePhoto({})
+    expect(api.getMe).toHaveBeenCalledTimes(2)
+  })
 
-  it("mengambil profil", async () => {
-    const store = useUsersStore();
-    await store.fetchProfile();
-    expect(store.profile).toEqual({ id: 1, name: "Ifs" });
-    expect(store.user).toEqual(store.profile);
-  });
-
-  it.each([
-    ["changeProfile", "putMe", "isProfileChange", { name: "x" }],
-    ["changePhoto", "postPhoto", "isPhotoChange", new FormData()],
-    ["changePassword", "putPassword", "isPasswordChange", { password: "a" }],
-  ])("%s memanggil API lalu memuat ulang profil", async (action, apiName, flag, payload) => {
-    api[apiName].mockResolvedValue({ message: "Tersimpan" });
-    const store = useUsersStore();
-
-    expect(await store[action](payload)).toBe("Tersimpan");
-
-    expect(api[apiName]).toHaveBeenCalledWith(payload);
-    expect(api.getMe).toHaveBeenCalledTimes(1);
-    expect(store[flag]).toBe(false);
-  });
-
-  it("mematikan flag saat mutasi gagal", async () => {
-    api.putMe.mockRejectedValue(new Error("gagal"));
-    const store = useUsersStore();
-    await expect(store.changeProfile({})).rejects.toThrow("gagal");
-    expect(store.isProfileChange).toBe(false);
-  });
-});
+  it('changes password', async () => {
+    api.changePassword.mockResolvedValue(ok({}))
+    expect((await useUsersStore().savePassword({})).success).toBe(true)
+  })
+})

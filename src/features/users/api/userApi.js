@@ -1,7 +1,12 @@
-import { apiFetch } from "../../../helpers/apiHelper";
+import { requestJson } from '../../../helpers/apiHelper.js'
 
-export const getUsers = () => apiFetch("/users");
-export const getMe = () => apiFetch("/users/me");
-export const putMe = (body) => apiFetch("/users/me", { method: "PUT", body });
-export const postPhoto = (form) => apiFetch("/users/me/photo", { method: "POST", form });
-export const putPassword = (body) => apiFetch("/users/me/password", { method: "PUT", body });
+export const getUsers = () => requestJson('/users')
+export const getMe = () => requestJson('/users/me')
+export const updateMe = (body) => requestJson('/users/me', { method: 'PUT', body: JSON.stringify(body) })
+export const uploadPhoto = (file) => {
+  const form = new FormData()
+  form.append('photo', file)
+  return requestJson('/users/me/photo', { method: 'POST', body: form })
+}
+export const changePassword = (body) =>
+  requestJson('/users/password', { method: 'PUT', body: JSON.stringify(body) })

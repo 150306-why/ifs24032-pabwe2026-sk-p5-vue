@@ -1,62 +1,38 @@
 <script setup>
-import { useRouter } from "vue-router";
-import { useAuthStore } from "../states/authStore";
-import { useInput } from "../../../hooks/useInput";
-import { showErrorDialog } from "../../../helpers/toolsHelper";
+import { useRouter } from 'vue-router'
+import { useInput } from '../../../hooks/useInput.js'
+import { useAuthStore } from '../states/authStore.js'
+import { showErrorDialog } from '../../../helpers/toolsHelper.js'
 
-const auth = useAuthStore();
-const router = useRouter();
-const [email, onEmail] = useInput("");
-const [password, onPassword] = useInput("");
+const router = useRouter()
+const auth = useAuthStore()
+const { value: email, onInput: onEmail } = useInput()
+const { value: password, onInput: onPassword } = useInput()
 
 async function submit() {
-  try {
-    await auth.login({ email: email.value, password: password.value });
-    router.replace("/");
-  } catch (error) {
-    showErrorDialog(error.message);
-  }
+  const res = await auth.loginUser({ email: email.value, password: password.value })
+  if (res.success) router.push('/')
+  else showErrorDialog(res.message)
 }
 </script>
 
 <template>
-  <h1 class="mb-6 text-center text-2xl font-extrabold">Masuk Akun</h1>
   <form class="space-y-4" @submit.prevent="submit">
+    <h2 class="text-lg font-semibold">Masuk ke akun Anda</h2>
     <div>
-      <label for="login-email-input" class="mb-1 block text-sm font-semibold text-slate-700">Alamat email</label>
-      <input
-        id="login-email-input"
-        type="email"
-        autocomplete="email"
-        required
-        :value="email"
-        class="w-full rounded-lg border border-slate-400 px-3 py-2"
-        @input="onEmail"
-      />
+      <label for="login-email-input" class="block text-sm font-semibold mb-1">Email</label>
+      <input id="login-email-input" type="email" aria-label="Email" required :value="email" @input="onEmail"
+        class="w-full rounded-lg border border-stone-500 px-3 py-2" />
     </div>
     <div>
-      <label for="login-password-input" class="mb-1 block text-sm font-semibold text-slate-700">Kata sandi</label>
-      <input
-        id="login-password-input"
-        type="password"
-        autocomplete="current-password"
-        required
-        :value="password"
-        class="w-full rounded-lg border border-slate-400 px-3 py-2"
-        @input="onPassword"
-      />
+      <label for="login-password-input" class="block text-sm font-semibold mb-1">Kata sandi</label>
+      <input id="login-password-input" type="password" aria-label="Kata sandi" required :value="password" @input="onPassword"
+        class="w-full rounded-lg border border-stone-500 px-3 py-2" />
     </div>
-    <button
-      id="login-submit-button"
-      type="submit"
-      :disabled="auth.isAuthLogin"
-      class="w-full rounded-lg bg-indigo-700 py-2 font-semibold text-white hover:bg-indigo-800 disabled:opacity-70"
-    >
-      Masuk sekarang
-    </button>
+    <button id="login-submit-button" type="submit" aria-label="Masuk"
+      class="w-full rounded-lg bg-brand px-4 py-2 font-semibold text-white">Masuk</button>
+    <p class="text-sm">Belum punya akun?
+      <RouterLink to="/auth/register" class="font-semibold text-brand underline">Daftar</RouterLink>
+    </p>
   </form>
-  <p class="mt-4 text-center text-sm text-slate-700">
-    Belum punya akun?
-    <RouterLink to="/auth/register" class="font-semibold text-indigo-700 underline">Daftar baru</RouterLink>
-  </p>
 </template>

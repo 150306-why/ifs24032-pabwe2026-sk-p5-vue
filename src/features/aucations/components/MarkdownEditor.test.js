@@ -1,21 +1,11 @@
-import { describe, expect, it } from "vitest";
-import { mount } from "@vue/test-utils";
-import MarkdownEditor from "./MarkdownEditor.vue";
+import { render, screen, fireEvent } from '@testing-library/vue'
+import MarkdownEditor from './MarkdownEditor.vue'
 
-describe("MarkdownEditor", () => {
-  it("menampilkan label, nilai, dan mengirim update:modelValue", async () => {
-    const wrapper = mount(MarkdownEditor, { props: { id: "desc", modelValue: "halo" } });
-    expect(wrapper.find("label").attributes("for")).toBe("desc");
-    expect(wrapper.find("label").text()).toContain("Markdown");
-    expect(wrapper.find("textarea").element.value).toBe("halo");
-
-    await wrapper.find("textarea").setValue("baru");
-    expect(wrapper.emitted("update:modelValue")[0]).toEqual(["baru"]);
-  });
-
-  it("memakai nilai bawaan dan label kustom", () => {
-    const wrapper = mount(MarkdownEditor, { props: { id: "d", label: "Catatan" } });
-    expect(wrapper.find("label").text()).toBe("Catatan");
-    expect(wrapper.find("textarea").element.value).toBe("");
-  });
-});
+it('emits typed text and toolbar snippets and previews them', async () => {
+  const { emitted } = render(MarkdownEditor, { props: { id: 'd', label: 'Deskripsi', modelValue: 'a' } })
+  await fireEvent.update(screen.getByLabelText('Deskripsi'), 'xyz')
+  expect(emitted()['update:modelValue'].at(-1)).toEqual(['xyz'])
+  for (const name of ['Tebal', 'Miring', 'Daftar']) await fireEvent.click(screen.getByRole('button', { name }))
+  expect(emitted()['update:modelValue'].slice(-3).map((e) => e[0])).toEqual(['a**teks tebal**', 'a*teks miring*', 'a\n- butir'])
+  expect(screen.getByRole('region', { name: 'Pratinjau' })).toHaveTextContent('a')
+})

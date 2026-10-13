@@ -1,16 +1,16 @@
-import { describe, expect, it } from "vitest";
-import { useInput } from "./useInput";
+import { useInput } from './useInput.js'
 
-describe("useInput", () => {
-  it("memakai nilai awal bawaan", () => {
-    const [value] = useInput();
-    expect(value.value).toBe("");
-  });
+describe('useInput', () => {
+  it('defaults to empty string, updates and resets', () => {
+    const { value, onInput, reset } = useInput()
+    expect(value.value).toBe('')
+    onInput({ target: { value: 'hi' } })
+    expect(value.value).toBe('hi')
+    reset()
+    expect(value.value).toBe('')
+  })
 
-  it("memperbarui nilai saat onChange dipanggil", () => {
-    const [value, onChange] = useInput("awal");
-    expect(value.value).toBe("awal");
-    onChange({ target: { value: "baru" } });
-    expect(value.value).toBe("baru");
-  });
-});
+  it('uses given initial value', () => {
+    expect(useInput('x').value.value).toBe('x')
+  })
+})

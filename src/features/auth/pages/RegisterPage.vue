@@ -1,76 +1,46 @@
 <script setup>
-import { useRouter } from "vue-router";
-import { useAuthStore } from "../states/authStore";
-import { useInput } from "../../../hooks/useInput";
-import { showErrorDialog, showSuccessDialog } from "../../../helpers/toolsHelper";
+import { useRouter } from 'vue-router'
+import { useInput } from '../../../hooks/useInput.js'
+import { useAuthStore } from '../states/authStore.js'
+import { showErrorDialog, showSuccessDialog } from '../../../helpers/toolsHelper.js'
 
-const auth = useAuthStore();
-const router = useRouter();
-const [name, onName] = useInput("");
-const [email, onEmail] = useInput("");
-const [password, onPassword] = useInput("");
+const router = useRouter()
+const auth = useAuthStore()
+const { value: name, onInput: onName } = useInput()
+const { value: email, onInput: onEmail } = useInput()
+const { value: password, onInput: onPassword } = useInput()
 
 async function submit() {
-  try {
-    const message = await auth.register({ name: name.value, email: email.value, password: password.value });
-    await showSuccessDialog(message);
-    router.replace("/auth/login");
-  } catch (error) {
-    showErrorDialog(error.message);
-  }
+  const res = await auth.registerUser({ name: name.value, email: email.value, password: password.value })
+  if (res.success) {
+    await showSuccessDialog(res.message)
+    router.push('/auth/login')
+  } else showErrorDialog(res.message)
 }
 </script>
 
 <template>
-  <h1 class="mb-6 text-center text-2xl font-extrabold">Daftar Akun</h1>
   <form class="space-y-4" @submit.prevent="submit">
+    <h2 class="text-lg font-semibold">Buat akun baru</h2>
     <div>
-      <label for="register-name-input" class="mb-1 block text-sm font-semibold text-slate-700">Nama lengkap</label>
-      <input
-        id="register-name-input"
-        type="text"
-        autocomplete="name"
-        required
-        :value="name"
-        class="w-full rounded-lg border border-slate-400 px-3 py-2"
-        @input="onName"
-      />
+      <label for="register-name-input" class="block text-sm font-semibold mb-1">Nama</label>
+      <input id="register-name-input" aria-label="Nama" required :value="name" @input="onName"
+        class="w-full rounded-lg border border-stone-500 px-3 py-2" />
     </div>
     <div>
-      <label for="register-email-input" class="mb-1 block text-sm font-semibold text-slate-700">Alamat email</label>
-      <input
-        id="register-email-input"
-        type="email"
-        autocomplete="email"
-        required
-        :value="email"
-        class="w-full rounded-lg border border-slate-400 px-3 py-2"
-        @input="onEmail"
-      />
+      <label for="register-email-input" class="block text-sm font-semibold mb-1">Email</label>
+      <input id="register-email-input" type="email" aria-label="Email" required :value="email" @input="onEmail"
+        class="w-full rounded-lg border border-stone-500 px-3 py-2" />
     </div>
     <div>
-      <label for="register-password-input" class="mb-1 block text-sm font-semibold text-slate-700">Kata sandi</label>
-      <input
-        id="register-password-input"
-        type="password"
-        autocomplete="new-password"
-        minlength="6"
-        required
-        :value="password"
-        class="w-full rounded-lg border border-slate-400 px-3 py-2"
-        @input="onPassword"
-      />
+      <label for="register-password-input" class="block text-sm font-semibold mb-1">Kata sandi</label>
+      <input id="register-password-input" type="password" aria-label="Kata sandi" required :value="password" @input="onPassword"
+        class="w-full rounded-lg border border-stone-500 px-3 py-2" />
     </div>
-    <button
-      type="submit"
-      :disabled="auth.isAuthRegister"
-      class="w-full rounded-lg bg-indigo-700 py-2 font-semibold text-white hover:bg-indigo-800 disabled:opacity-70"
-    >
-      Daftar sekarang
-    </button>
+    <button id="register-submit-button" type="submit" aria-label="Daftar"
+      class="w-full rounded-lg bg-brand px-4 py-2 font-semibold text-white">Daftar</button>
+    <p class="text-sm">Sudah punya akun?
+      <RouterLink to="/auth/login" class="font-semibold text-brand underline">Masuk</RouterLink>
+    </p>
   </form>
-  <p class="mt-4 text-center text-sm text-slate-700">
-    Sudah punya akun?
-    <RouterLink to="/auth/login" class="font-semibold text-indigo-700 underline">Masuk</RouterLink>
-  </p>
 </template>
